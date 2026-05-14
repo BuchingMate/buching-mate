@@ -60,7 +60,6 @@
     "babel-plugin-react-compiler": "^1.0.0",
     "tailwindcss": "^4.1.18",
     "typescript": "^5.9.3",
-    "vite": "^8",
-    "vite-tsconfig-paths": "^5.1.4"
+    "vite": "^8"
   }
 }
