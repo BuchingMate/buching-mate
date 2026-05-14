@@ -51,26 +51,31 @@ function Signup() {
 
     setLoading(true);
 
-    const result = await authClient.signUp.email({
-      name,
-      email,
-      password,
-    });
+    try {
+      const result = await authClient.signUp.email({
+        name,
+        email,
+        password,
+      });
 
-    if (result.error) {
-      setError(result.error.message ?? "Unable to create account");
+      if (result.error) {
+        setError(result.error.message ?? "Unable to create account");
+        return;
+      }
+
+      await queryClient.invalidateQueries({ queryKey: authKeys.session });
+      await navigate({ to: "/onboarding" });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to create account");
+    } finally {
       setLoading(false);
-      return;
     }
-
-    await queryClient.invalidateQueries({ queryKey: authKeys.session });
-    await navigate({ to: "/onboarding" });
   };
 
   const handleGoogleSignUp = async () => {
     await authClient.signIn.social({
       provider: "google",
-      callbackURL: "/onboarding",
+      callbackURL: `${window.location.origin}/onboarding`,
     });
   };
 

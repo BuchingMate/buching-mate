@@ -3,7 +3,7 @@ import { isPaymentProvider } from "@workspace/contracts";
 import { apiError } from "./errors";
 import { isRecord, readJson } from "./validation";
 import type { ApiEnv } from "./types";
-import { requireAuth, requireOrg, requirePlan, requireRole } from "../middleware/auth";
+import { requireAuth, requireOrg, requireRole } from "../middleware/auth";
 import { logEvent } from "../observability/events";
 import { enrichLogger, getLogger } from "../observability/request-context";
 import {
@@ -126,7 +126,7 @@ paymentRoutes
   .get("/connections", async (c) =>
     c.json({ connections: await listPaymentConnections(c.var.orgId) }),
   )
-  .post("/connect", requireRole("admin"), requirePlan("team"), async (c) => {
+  .post("/connect", requireRole("admin"), async (c) => {
     const body = (await readJson(c)) as Record<string, unknown> | null;
     if (!isRecord(body) || typeof body.provider !== "string") {
       return apiError(c, 400, "invalid_connect", "provider is required");

@@ -60,20 +60,26 @@ function StaffLogin() {
     setLoading(true);
     setError("");
 
-    const result = await authClient.signIn.email({ email, password });
+    try {
+      const result = await authClient.signIn.email({ email, password });
 
-    if (result.error) {
-      setError(result.error.message ?? "Unable to sign in");
+      if (result.error) {
+        setError(result.error.message ?? "Unable to sign in");
+        return;
+      }
+
+      await queryClient.invalidateQueries({ queryKey: authKeys.session });
+      await queryClient.invalidateQueries({ queryKey: authKeys.currentOrg });
+      await navigate({ to: "/admin" });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to sign in");
+    } finally {
       setLoading(false);
-      return;
     }
-
-    await queryClient.invalidateQueries({ queryKey: authKeys.session });
-    await navigate({ to: "/admin" });
   };
 
   const handleGoogleSignIn = async () => {
-    await authClient.signIn.social({ provider: "google", callbackURL: "/admin" });
+    await authClient.signIn.social({ provider: "google", callbackURL: `${window.location.origin}/admin` });
   };
 
   return (

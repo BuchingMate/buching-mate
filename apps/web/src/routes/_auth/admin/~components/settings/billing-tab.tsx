@@ -14,19 +14,29 @@ export function BillingTab(_props: { orgSlug: string }) {
   const stateQuery = useQuery({
     queryKey: ["billing", "customer-state"],
     queryFn: async () => {
-      const res = await authClient.customer.state();
-      return res.data ?? null;
+      try {
+        const res = await authClient.customer.state();
+        return res.data ?? null;
+      } catch {
+        return null;
+      }
     },
+    retry: false,
   });
 
   const subsQuery = useQuery({
     queryKey: ["billing", "subscriptions"],
     queryFn: async () => {
-      const res = await authClient.customer.subscriptions.list({
-        query: { page: 1, limit: 10, active: true },
-      });
-      return res.data ?? null;
+      try {
+        const res = await authClient.customer.subscriptions.list({
+          query: { page: 1, limit: 10, active: true },
+        });
+        return res.data ?? null;
+      } catch {
+        return null;
+      }
     },
+    retry: false,
   });
 
   const active = subsQuery.data?.result?.items?.[0];
