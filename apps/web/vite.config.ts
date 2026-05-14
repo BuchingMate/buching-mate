@@ -1,6 +1,7 @@
 import { defineConfig } from "vite";
 import { tanstackStart } from "@tanstack/react-start/plugin/vite";
-import viteReact from "@vitejs/plugin-react";
+import viteReact, { reactCompilerPreset } from "@vitejs/plugin-react";
+import babel from "@rolldown/plugin-babel";
 import tailwindcss from "@tailwindcss/vite";
 import { nitro } from "nitro/vite";
 
@@ -15,11 +16,11 @@ export default defineConfig({
     tanstackStart({
       router: { routeFileIgnorePattern: "~components" },
     }),
-    viteReact({
-      babel: {
-        plugins: [["babel-plugin-react-compiler", { target: "19" }]],
-      },
+    babel({
+      include: /\.[jt]sx?$/,
+      presets: [reactCompilerPreset({ target: "19" })],
     }),
+    viteReact(),
   ],
   server: {
     port: Number(process.env.WEB_PORT ?? 5678),

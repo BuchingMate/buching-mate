@@ -50,6 +50,13 @@
       "when": 1778654225288,
       "tag": "0006_mysterious_puma",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1778770913074,
+      "tag": "0007_numerous_lucky_pierre",
+      "breakpoints": true
     }
   ]
 }

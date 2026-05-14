@@ -32,6 +32,13 @@ const byteaCol = customType<{ data: Buffer; driverData: Buffer }>({
 
 export const orgRole = pgEnum("org_role", ["owner", "admin", "manager", "viewer"]);
 export const orgPlan = pgEnum("org_plan", ["free", "team", "enterprise"]);
+export const polarSubscriptionStatus = pgEnum("polar_subscription_status", [
+  "trialing",
+  "active",
+  "past_due",
+  "canceled",
+  "incomplete",
+]);
 export const eventStatus = pgEnum("event_status", ["upcoming", "completed", "cancelled"]);
 export const eventVisibility = pgEnum("event_visibility", ["published", "unpublished"]);
 export const publicAssetKind = pgEnum("public_asset_kind", ["org_logo", "event_image"]);
@@ -458,5 +465,29 @@ export const webhookDeliveries = pgTable(
   (table) => [
     index("webhook_deliveries_org_id_idx").on(table.orgId),
     index("webhook_deliveries_org_status_idx").on(table.orgId, table.status),
+  ],
+);
+
+export const polarSubscriptions = pgTable(
+  "polar_subscriptions",
+  {
+    id: id(),
+    orgId: text("org_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    polarCustomerId: text("polar_customer_id").notNull(),
+    polarSubscriptionId: text("polar_subscription_id"),
+    polarProductId: text("polar_product_id"),
+    status: polarSubscriptionStatus("status").notNull().default("incomplete"),
+    seatCount: integer("seat_count").notNull().default(1),
+    currentPeriodEnd: timestamp("current_period_end"),
+    trialEndsAt: timestamp("trial_ends_at"),
+    cancelAtPeriodEnd: boolean("cancel_at_period_end").notNull().default(false),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (table) => [
+    uniqueIndex("polar_subscriptions_org_idx").on(table.orgId),
+    index("polar_subscriptions_subscription_idx").on(table.polarSubscriptionId),
   ],
 );

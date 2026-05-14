@@ -7,6 +7,7 @@ import { AccessDenied } from "@/components/access-denied";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   canDeleteOrg,
+  canManageBilling,
   canManagePayments,
   canManageSettings,
   canManageWebhooks,
@@ -17,7 +18,10 @@ import { CategoriesTab } from "./~components/settings/categories-tab";
 import { WebhooksTab } from "./~components/settings/webhooks-tab";
 import { MembersTab } from "./~components/settings/members-tab";
 import { PaymentsTab } from "./~components/settings/payments-tab";
+import { BillingTab } from "./~components/settings/billing-tab";
 import { DangerTab } from "./~components/settings/danger-tab";
+
+const BILLING_ENABLED = import.meta.env.VITE_BILLING_ENABLED === "true";
 import { pageHead } from "@/lib/seo";
 
 export const Route = createFileRoute("/_auth/admin/$orgSlug/settings")({
@@ -64,6 +68,7 @@ function SettingsTabs({ orgSlug, role }: { orgSlug: string; role: OrgRole }) {
   const showDanger = canDeleteOrg(role);
   const showPayments = canManagePayments(role);
   const showWebhooks = canManageWebhooks(role);
+  const showBilling = BILLING_ENABLED && canManageBilling(role);
 
   return (
     <div className="mx-auto max-w-3xl">
@@ -73,6 +78,7 @@ function SettingsTabs({ orgSlug, role }: { orgSlug: string; role: OrgRole }) {
           <TabsTrigger value="categories">Categories</TabsTrigger>
           {showWebhooks && <TabsTrigger value="webhooks">Webhooks</TabsTrigger>}
           {showPayments && <TabsTrigger value="payments">Payments</TabsTrigger>}
+          {showBilling && <TabsTrigger value="billing">Billing</TabsTrigger>}
           <TabsTrigger value="members">Members</TabsTrigger>
           {showDanger && <TabsTrigger value="danger">Danger</TabsTrigger>}
         </TabsList>
@@ -91,6 +97,11 @@ function SettingsTabs({ orgSlug, role }: { orgSlug: string; role: OrgRole }) {
         {showPayments && (
           <TabsContent value="payments" className="mt-6">
             <PaymentsTab />
+          </TabsContent>
+        )}
+        {showBilling && (
+          <TabsContent value="billing" className="mt-6">
+            <BillingTab orgSlug={orgSlug} />
           </TabsContent>
         )}
         <TabsContent value="members" className="mt-6">

@@ -1,0 +1,31 @@
+BuchingMate Cloud License (v1)
+==============================
+
+Copyright (c) 2026 Peter Qian / BuchingMate
+
+The source code in this directory ("EE Code") is source-available but is NOT
+released under the same MIT license that governs the rest of this repository.
+
+You ARE permitted to:
+  - Read, study, and modify the EE Code for personal, educational, or internal
+    business use.
+  - Self-host the EE Code as part of your own internal deployment of
+    BuchingMate.
+  - Submit improvements back via pull request to the upstream repository
+    (https://github.com/BuchingMate/buching-mate).
+
+You are NOT permitted to:
+  - Operate the EE Code (in whole or in part, modified or unmodified) as a
+    commercial software-as-a-service offering that competes with BuchingMate
+    Cloud (https://buching-mate.com).
+  - Resell, sublicense, or redistribute the EE Code as a paid product.
+  - Remove or alter this LICENSE file or relicense the EE Code under any
+    other terms.
+  - Use BuchingMate trademarks (name, logo) for any commercial offering
+    derived from this code.
+
+The EE Code is provided "AS IS", without warranty of any kind, express or
+implied, including but not limited to the warranties of merchantability,
+fitness for a particular purpose, and noninfringement.
+
+For commercial licensing inquiries, contact: contact@buchingmate.com

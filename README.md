@@ -47,6 +47,12 @@ If you modify Buching and provide it to users over a network, the AGPL requires 
 
 See [`LICENSE`](./LICENSE) for the full license text.
 
+### Enterprise / Cloud code
+
+Code under [`apps/server/src/ee/`](./apps/server/src/ee/) is **source-available but not AGPL**. It is governed by the BuchingMate Cloud License — readable and self-hostable for personal/internal use, but not for operating a competing commercial SaaS.
+
+See [`apps/server/src/ee/LICENSE`](./apps/server/src/ee/LICENSE) for the EE terms.
+
 ## Commercial Use
 
 You may use Buching to run your own business, including paid events, classes, workshops, or services.
