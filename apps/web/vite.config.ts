@@ -14,7 +14,11 @@ export default defineConfig({
     tanstackStart({
       router: { routeFileIgnorePattern: "~components" },
     }),
-    viteReact(),
+    viteReact({
+      babel: {
+        plugins: [["babel-plugin-react-compiler", { target: "19" }]],
+      },
+    }),
   ],
   server: {
     port: Number(process.env.WEB_PORT ?? 5678),
