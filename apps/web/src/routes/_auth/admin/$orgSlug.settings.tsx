@@ -24,13 +24,31 @@ import { DangerTab } from "./~components/settings/danger-tab";
 const BILLING_ENABLED = import.meta.env.VITE_BILLING_ENABLED === "true";
 import { pageHead } from "@/lib/seo";
 
+const VALID_TABS = [
+  "general",
+  "categories",
+  "webhooks",
+  "payments",
+  "billing",
+  "members",
+  "danger",
+] as const;
+type SettingsTab = (typeof VALID_TABS)[number];
+
 export const Route = createFileRoute("/_auth/admin/$orgSlug/settings")({
   component: OrganizationSettings,
   head: () => pageHead("Organization settings"),
+  validateSearch: (search: Record<string, unknown>): { tab?: SettingsTab } => {
+    const raw = search.tab;
+    return typeof raw === "string" && (VALID_TABS as readonly string[]).includes(raw)
+      ? { tab: raw as SettingsTab }
+      : {};
+  },
 });
 
 function OrganizationSettings() {
   const { orgSlug } = Route.useParams();
+  const { tab: searchTab } = Route.useSearch();
   const navigate = useNavigate();
   const orgQuery = useQuery(currentOrgQueryOptions);
   const role = orgQuery.data?.memberRole;
@@ -58,13 +76,21 @@ function OrganizationSettings() {
 
   return (
     <AppShell title="Organization settings" description="Manage organization-wide settings.">
-      <SettingsTabs orgSlug={orgSlug} role={role!} />
+      <SettingsTabs orgSlug={orgSlug} role={role!} initialTab={searchTab ?? "general"} />
     </AppShell>
   );
 }
 
-function SettingsTabs({ orgSlug, role }: { orgSlug: string; role: OrgRole }) {
-  const [tab, setTab] = useState("general");
+function SettingsTabs({
+  orgSlug,
+  role,
+  initialTab,
+}: {
+  orgSlug: string;
+  role: OrgRole;
+  initialTab: SettingsTab;
+}) {
+  const [tab, setTab] = useState<SettingsTab>(initialTab);
   const showDanger = canDeleteOrg(role);
   const showPayments = canManagePayments(role);
   const showWebhooks = canManageWebhooks(role);
@@ -72,7 +98,12 @@ function SettingsTabs({ orgSlug, role }: { orgSlug: string; role: OrgRole }) {
 
   return (
     <div className="mx-auto max-w-3xl">
-      <Tabs value={tab} onValueChange={(v) => v && setTab(v)}>
+      <Tabs
+        value={tab}
+        onValueChange={(v) => {
+          if (v && (VALID_TABS as readonly string[]).includes(String(v))) setTab(v as SettingsTab);
+        }}
+      >
         <TabsList>
           <TabsTrigger value="general">General</TabsTrigger>
           <TabsTrigger value="categories">Categories</TabsTrigger>

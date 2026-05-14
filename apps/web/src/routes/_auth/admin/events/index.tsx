@@ -1,10 +1,12 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { toast } from "sonner";
 import { useMutation, useQuery, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
 import { DragDropProvider, useDraggable, useDroppable } from "@dnd-kit/react";
 import { useEffect, useMemo, useState } from "react";
-import { Calendar, LayoutGrid, List, Search, SlidersHorizontal } from "lucide-react";
+import { Calendar, LayoutGrid, List, Lock, Search, SlidersHorizontal } from "lucide-react";
 import type { EventDto, EventStatus, EventVisibility } from "@workspace/contracts";
 import { AppShell } from "@/components/app-shell";
+import { ApiError } from "@/lib/api";
 import { pageHead } from "@/lib/seo";
 import { EmptyState } from "@/components/empty-state";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -74,7 +76,9 @@ function Events() {
   const orgContext = Route.useRouteContext() as Awaited<ReturnType<typeof getCurrentOrg>>;
   const role = orgContext.memberRole;
   const orgSlug = orgContext.org.slug;
+  const plan = orgContext.org.plan;
   const canManage = canManageEvents(role);
+  const navigate = useNavigate();
   const [view, setView] = useState<ViewMode>("list");
   const [segment, setSegment] = useState<EventSegment>("active");
   const [search, setSearch] = useState("");
@@ -144,6 +148,31 @@ function Events() {
 
   const activeFilterCount = [category, status, visibility].filter((v) => v !== "all").length;
 
+  const FREE_EVENTS_PER_MONTH = 1;
+  const eventsThisMonth = useMemo(() => {
+    const monthStart = new Date();
+    monthStart.setUTCDate(1);
+    monthStart.setUTCHours(0, 0, 0, 0);
+    return events.filter((event) => new Date(event.createdAt) >= monthStart).length;
+  }, [events]);
+  const atCap = plan === "free" && eventsThisMonth >= FREE_EVENTS_PER_MONTH;
+  const showUpgradeToast = () => {
+    toast.warning("Free plan limit reached", {
+      description: `You've used ${eventsThisMonth} of ${FREE_EVENTS_PER_MONTH} events this month. Upgrade to Team for unlimited events.`,
+      action: orgSlug
+        ? {
+            label: "Upgrade",
+            onClick: () =>
+              navigate({
+                to: "/admin/$orgSlug/settings",
+                params: { orgSlug },
+                search: { tab: "billing" },
+              }),
+          }
+        : undefined,
+    });
+  };
+
   const updateForm = (field: keyof EventFormState, value: string) => {
     setForm((current) => ({ ...current, [field]: value }));
   };
@@ -205,6 +234,11 @@ function Events() {
         setError(`Event created, but some images failed to upload: ${uploadErrors.join(", ")}`);
       }
     } catch (error) {
+      if (error instanceof ApiError && error.code === "event_cap_exceeded") {
+        setCreateOpen(false);
+        showUpgradeToast();
+        return;
+      }
       setError(error instanceof Error ? error.message : "Unable to create event");
     }
   };
@@ -235,7 +269,13 @@ function Events() {
       title="Events"
       description="Create, filter, sort, and schedule event work."
       headerActions={
-        <Button size="sm" disabled={!canManage} onClick={() => setCreateOpen(true)}>
+        <Button
+          size="sm"
+          disabled={!canManage}
+          variant={atCap ? "outline" : "default"}
+          onClick={() => (atCap ? showUpgradeToast() : setCreateOpen(true))}
+        >
+          {atCap ? <Lock className="size-3.5" /> : null}
           New event
         </Button>
       }

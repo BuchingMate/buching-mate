@@ -4,6 +4,7 @@ import { makeAppHead } from "@/lib/seo";
 import { ApiError } from "@/lib/api";
 import { BUSINESS_NAME } from "@/lib/branding";
 import { Button } from "@/components/ui/button";
+import { Toaster } from "@/components/ui/sonner";
 import { getPublicOrigin } from "@/lib/public";
 import appCss from "@/styles/globals.css?url";
 
@@ -82,6 +83,7 @@ function RootDocument({ children }: { children: React.ReactNode }) {
       </head>
       <body>
         {children}
+        <Toaster position="top-center" richColors />
         <Scripts />
       </body>
     </html>

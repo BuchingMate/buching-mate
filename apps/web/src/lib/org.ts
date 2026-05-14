@@ -7,6 +7,7 @@ export interface CurrentOrgResponse {
     name: string;
     slug: string | null;
     logo: string | null;
+    plan: "free" | "team" | "enterprise";
   };
   memberRole: OrgRole;
 }
