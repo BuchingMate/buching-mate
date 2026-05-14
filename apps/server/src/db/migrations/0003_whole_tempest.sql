@@ -1,0 +1,1 @@
+ALTER TABLE "public_assets" ADD COLUMN "asset_role" text DEFAULT 'cover' NOT NULL;
