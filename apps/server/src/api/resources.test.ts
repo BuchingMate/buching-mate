@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { addUserToOrg, signUpAndCreateOrg } from "../helpers/auth";
-import { asJson, req } from "../helpers/request";
+import { addUserToOrg, signUpAndCreateOrg, signUpUser } from "../../test/helpers/auth";
+import { asJson, req } from "../../test/helpers/request";
 
 const validResource = {
   type: "instructor",
@@ -16,7 +16,7 @@ describe("POST /api/resources", () => {
 
   test("403 when authed user has no org membership", async () => {
     const owner = await signUpAndCreateOrg();
-    const orphan = await (await import("../helpers/auth")).signUpUser();
+    const orphan = await signUpUser();
     const res = await req("/api/resources", {
       method: "POST",
       body: validResource,

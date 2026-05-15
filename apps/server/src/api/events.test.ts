@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { addUserToOrg, signUpAndCreateOrg } from "../helpers/auth";
-import { asJson, req } from "../helpers/request";
+import { addUserToOrg, signUpAndCreateOrg } from "../../test/helpers/auth";
+import { asJson, req } from "../../test/helpers/request";
 
 const validEvent = {
   title: "Yoga Class",
