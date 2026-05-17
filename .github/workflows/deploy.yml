@@ -74,12 +74,13 @@ jobs:
       - name: Trigger Coolify redeploy
         env:
           WEBHOOK: ${{ needs.cloud-meta.outputs.env_name == 'production' && secrets.COOLIFY_WEBHOOK_URL_PROD || secrets.COOLIFY_WEBHOOK_URL_STAGING }}
+          TOKEN: ${{ secrets.COOLIFY_API_TOKEN }}
         run: |
-          if [ -n "$WEBHOOK" ]; then
+          if [ -n "$WEBHOOK" ] && [ -n "$TOKEN" ]; then
             echo "Triggering Coolify redeploy for ${{ needs.cloud-meta.outputs.env_name }}"
-            curl -fsSL -X POST "$WEBHOOK"
+            curl -fsSL -X GET -H "Authorization: Bearer $TOKEN" "$WEBHOOK"
           else
-            echo "No Coolify webhook secret set for ${{ needs.cloud-meta.outputs.env_name }} — skipping (Coolify will pull on its own poll cycle)"
+            echo "Missing COOLIFY_WEBHOOK_URL or COOLIFY_API_TOKEN — skipping (Coolify will pull on its own poll cycle)"
           fi
 
   cloud-web:
