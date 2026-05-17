@@ -124,10 +124,24 @@ export const auth = betterAuth({
   }),
   secret: process.env.BETTER_AUTH_SECRET,
   baseURL: process.env.BETTER_AUTH_URL,
-  trustedOrigins: [process.env.WEB_URL || "http://localhost:5678"],
+  trustedOrigins: (process.env.TRUSTED_ORIGINS ?? process.env.WEB_URL ?? "http://localhost:5678")
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean),
   emailAndPassword: {
     enabled: true,
   },
   socialProviders: googleProvider,
   plugins: polarPlugin ? [organizationPlugin, polarPlugin] : [organizationPlugin],
+  ...(process.env.COOKIE_DOMAIN
+    ? {
+        advanced: {
+          defaultCookieAttributes: {
+            domain: process.env.COOKIE_DOMAIN,
+            sameSite: "lax" as const,
+            secure: true,
+          },
+        },
+      }
+    : {}),
 });

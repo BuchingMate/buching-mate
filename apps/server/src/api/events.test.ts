@@ -10,12 +10,12 @@ const validEvent = {
 };
 
 describe("POST /api/events", () => {
-  test("401 without session", async () => {
+  test("should return 401 when the user is not signed in", async () => {
     const res = await req("/api/events", { method: "POST", body: validEvent });
     expect(res.status).toBe(401);
   });
 
-  test("403 viewer cannot create", async () => {
+  test("should return 403 when the user role is below manager", async () => {
     const fx = await signUpAndCreateOrg();
     const viewer = await addUserToOrg(fx.orgId, "viewer");
     const res = await req("/api/events", {
@@ -27,7 +27,7 @@ describe("POST /api/events", () => {
     expect(res.status).toBe(403);
   });
 
-  test("201 manager creates valid event under correct org", async () => {
+  test("should create the event in the user's org and return 201", async () => {
     const fx = await signUpAndCreateOrg();
     const res = await req("/api/events", {
       method: "POST",
@@ -42,7 +42,7 @@ describe("POST /api/events", () => {
     expect(body.event.title).toBe("Yoga Class");
   });
 
-  test("400 blank title", async () => {
+  test("should return 400 when the title is empty", async () => {
     const fx = await signUpAndCreateOrg();
     const res = await req("/api/events", {
       method: "POST",
@@ -53,7 +53,7 @@ describe("POST /api/events", () => {
     expect(res.status).toBe(400);
   });
 
-  test("400 non-positive duration", async () => {
+  test("should return 400 when the duration is zero or less", async () => {
     const fx = await signUpAndCreateOrg();
     const res = await req("/api/events", {
       method: "POST",
@@ -64,7 +64,7 @@ describe("POST /api/events", () => {
     expect(res.status).toBe(400);
   });
 
-  test("400 negative price", async () => {
+  test("should return 400 when the price is negative", async () => {
     const fx = await signUpAndCreateOrg();
     const res = await req("/api/events", {
       method: "POST",
@@ -75,7 +75,7 @@ describe("POST /api/events", () => {
     expect(res.status).toBe(400);
   });
 
-  test("400 non-integer price", async () => {
+  test("should return 400 when the price has decimals (price must be in cents)", async () => {
     const fx = await signUpAndCreateOrg();
     const res = await req("/api/events", {
       method: "POST",
@@ -86,7 +86,7 @@ describe("POST /api/events", () => {
     expect(res.status).toBe(400);
   });
 
-  test("free plan caps at 1 event per month", async () => {
+  test("should allow only 1 event per month on the free plan", async () => {
     const fx = await signUpAndCreateOrg();
     const first = await req("/api/events", {
       method: "POST",

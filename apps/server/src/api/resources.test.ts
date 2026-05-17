@@ -9,12 +9,12 @@ const validResource = {
 };
 
 describe("POST /api/resources", () => {
-  test("401 without session", async () => {
+  test("should return 401 when the user is not signed in", async () => {
     const res = await req("/api/resources", { method: "POST", body: validResource });
     expect(res.status).toBe(401);
   });
 
-  test("403 when authed user has no org membership", async () => {
+  test("should return 403 when the user does not belong to any org", async () => {
     const owner = await signUpAndCreateOrg();
     const orphan = await signUpUser();
     const res = await req("/api/resources", {
@@ -27,7 +27,7 @@ describe("POST /api/resources", () => {
     expect(owner.orgId).toBeTruthy();
   });
 
-  test("403 when role is below manager", async () => {
+  test("should return 403 when the user role is below manager", async () => {
     const fx = await signUpAndCreateOrg();
     const viewer = await addUserToOrg(fx.orgId, "viewer");
     const res = await req("/api/resources", {
@@ -39,7 +39,7 @@ describe("POST /api/resources", () => {
     expect(res.status).toBe(403);
   });
 
-  test("201 manager creates valid resource", async () => {
+  test("should create the resource and return 201 when a manager sends valid data", async () => {
     const fx = await signUpAndCreateOrg();
     const res = await req("/api/resources", {
       method: "POST",
@@ -55,7 +55,7 @@ describe("POST /api/resources", () => {
     expect(body.resource.metadata).toEqual({});
   });
 
-  test("resource isolated to creating org", async () => {
+  test("should keep a resource visible only to the org that created it", async () => {
     const a = await signUpAndCreateOrg();
     const b = await signUpAndCreateOrg();
 
@@ -71,7 +71,7 @@ describe("POST /api/resources", () => {
     expect(body.resources.find((r) => r.name === "OnlyInA")).toBeUndefined();
   });
 
-  test("400 invalid type", async () => {
+  test("should return 400 when the resource type is not allowed", async () => {
     const fx = await signUpAndCreateOrg();
     const res = await req("/api/resources", {
       method: "POST",
@@ -82,7 +82,7 @@ describe("POST /api/resources", () => {
     expect(res.status).toBe(400);
   });
 
-  test("400 blank name", async () => {
+  test("should return 400 when the name is empty", async () => {
     const fx = await signUpAndCreateOrg();
     const res = await req("/api/resources", {
       method: "POST",
@@ -93,7 +93,7 @@ describe("POST /api/resources", () => {
     expect(res.status).toBe(400);
   });
 
-  test("400 float capacity", async () => {
+  test("should return 400 when the capacity has decimals", async () => {
     const fx = await signUpAndCreateOrg();
     const res = await req("/api/resources", {
       method: "POST",
@@ -104,7 +104,7 @@ describe("POST /api/resources", () => {
     expect(res.status).toBe(400);
   });
 
-  test("400 negative cost", async () => {
+  test("should return 400 when the cost is negative", async () => {
     const fx = await signUpAndCreateOrg();
     const res = await req("/api/resources", {
       method: "POST",
@@ -115,7 +115,7 @@ describe("POST /api/resources", () => {
     expect(res.status).toBe(400);
   });
 
-  test("400 currency not 3-letter ISO", async () => {
+  test("should return 400 when the currency is not a 3-letter code", async () => {
     const fx = await signUpAndCreateOrg();
     const res = await req("/api/resources", {
       method: "POST",
@@ -126,7 +126,7 @@ describe("POST /api/resources", () => {
     expect(res.status).toBe(400);
   });
 
-  test("cost number coerced to 2-decimal string, currency upper-cased", async () => {
+  test("should save the cost with 2 decimals and the currency in uppercase", async () => {
     const fx = await signUpAndCreateOrg();
     const res = await req("/api/resources", {
       method: "POST",

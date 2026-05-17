@@ -17,11 +17,13 @@
     "db:logs": "docker compose logs -f db"
   },
   "devDependencies": {
+    "@cloudflare/vite-plugin": "^1.37.1",
     "oxfmt": "^0.47.0",
     "oxlint": "^1.32.0",
     "turbo": "^2.8.17",
     "typescript": "5.9.3",
-    "wrangler": "^4.90.0"
+    "web": "workspace:*",
+    "wrangler": "^4.92.0"
   },
   "packageManager": "bun@1.3.14",
   "engines": {

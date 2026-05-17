@@ -1,0 +1,23 @@
+**/node_modules
+**/dist
+**/.output
+**/.turbo
+**/*.log
+.env
+.env.*
+.git
+.github
+# apps/web is needed for the web image; server image only COPYs apps/server explicitly
+apps/web/node_modules
+apps/web/.output
+apps/web/.turbo
+.claude
+.plans
+.agents
+.continue
+.goose
+.kilocode
+.mux
+.pins
+docs
+README.md

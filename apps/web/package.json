@@ -6,6 +6,9 @@
   "scripts": {
     "dev": "vite dev",
     "build": "vite build",
+    "build:cf": "CF_BUILD=1 vite build",
+    "deploy:cf": "bun run build:cf && wrangler deploy",
+    "deploy:cf:staging": "bun run build:cf && wrangler deploy --env staging",
     "start": "node .output/server/index.mjs",
     "lint": "oxlint",
     "lint:fix": "oxlint --fix",

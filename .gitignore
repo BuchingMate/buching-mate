@@ -28,6 +28,9 @@ dist
 .nitro
 .tanstack
 
+# Wrangler (Cloudflare)
+.wrangler
+
 # Debug
 npm-debug.log*
 
