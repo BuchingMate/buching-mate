@@ -9,6 +9,7 @@ import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { db } from "../../db";
 import { eventResources, events, publicAssets, resources, registrations } from "../../db/schema";
 import { rewritePublicAssetUrl } from "../assets/public-url";
+import { incrementUsage } from "../subscription-usage";
 
 export function toEventDto(
   event: typeof events.$inferSelect,
@@ -151,33 +152,37 @@ export async function createEvent(
   createdById: string,
   input: CreateEventRequest,
 ): Promise<EventDto> {
-  const rows = await db
-    .insert(events)
-    .values({
-      orgId,
-      createdById,
-      title: input.title,
-      description: input.description ?? null,
-      notes: input.notes ?? null,
-      category: input.category ?? null,
-      tags: input.tags ?? [],
-      date: input.date,
-      time: input.time,
-      duration: input.duration,
-      allDay: input.allDay ?? false,
-      maxCapacity: input.maxCapacity ?? null,
-      location: input.location ?? null,
-      status: input.status ?? "upcoming",
-      visibility: input.visibility ?? "unpublished",
-      recurring: input.recurring ?? false,
-      recurrenceFrequency: input.recurrenceFrequency ?? null,
-      recurrenceDays: input.recurrenceDays ?? [],
-      recurrenceInterval: input.recurrenceInterval ?? null,
-      recurrenceEndDate: input.recurrenceEndDate ?? null,
-      price: input.price ?? 0,
-      imageUrl: input.imageUrl ?? null,
-    })
-    .returning();
+  const rows = await db.transaction(async (tx) => {
+    const inserted = await tx
+      .insert(events)
+      .values({
+        orgId,
+        createdById,
+        title: input.title,
+        description: input.description ?? null,
+        notes: input.notes ?? null,
+        category: input.category ?? null,
+        tags: input.tags ?? [],
+        date: input.date,
+        time: input.time,
+        duration: input.duration,
+        allDay: input.allDay ?? false,
+        maxCapacity: input.maxCapacity ?? null,
+        location: input.location ?? null,
+        status: input.status ?? "upcoming",
+        visibility: input.visibility ?? "unpublished",
+        recurring: input.recurring ?? false,
+        recurrenceFrequency: input.recurrenceFrequency ?? null,
+        recurrenceDays: input.recurrenceDays ?? [],
+        recurrenceInterval: input.recurrenceInterval ?? null,
+        recurrenceEndDate: input.recurrenceEndDate ?? null,
+        price: input.price ?? 0,
+        imageUrl: input.imageUrl ?? null,
+      })
+      .returning();
+    await incrementUsage(tx, orgId, "events_created");
+    return inserted;
+  });
 
   return toEventDto(rows[0], 0, 0);
 }

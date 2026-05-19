@@ -95,6 +95,22 @@ export const orgSettings = pgTable(
   (table) => [uniqueIndex("org_settings_org_id_idx").on(table.orgId)],
 );
 
+export const subscriptionUsage = pgTable(
+  "subscription_usage",
+  {
+    orgId: text("org_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    metric: text("metric").notNull(),
+    periodStart: timestamp("period_start").notNull(),
+    count: integer("count").notNull().default(0),
+    updatedAt: updatedAt(),
+  },
+  (table) => [
+    uniqueIndex("subscription_usage_pk_idx").on(table.orgId, table.metric, table.periodStart),
+  ],
+);
+
 export const resources = pgTable(
   "resources",
   {

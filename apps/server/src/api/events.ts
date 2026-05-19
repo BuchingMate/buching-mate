@@ -1,5 +1,4 @@
 import { Hono } from "hono";
-import { and, count, eq, gte } from "drizzle-orm";
 import type {
   CreateEventRequest,
   EventStatus,
@@ -11,8 +10,6 @@ import { apiError } from "./errors";
 import type { ApiEnv } from "./types";
 import { integerOrNull, isRecord, readJson, stringOrNull } from "./validation";
 import { requireAuth, requireOrg, requireRole } from "../middleware/auth";
-import { db } from "../db";
-import { events as eventsTable } from "../db/schema";
 import {
   createEvent,
   deleteEvent,
@@ -24,19 +21,14 @@ import {
   updateEvent,
 } from "../services/events";
 import { listRegistrationsByEvent } from "../services/registrations";
+import { getUsage } from "../services/subscription-usage";
 
 const FREE_EVENTS_PER_MONTH = 1;
 
 async function enforceFreeEventCap(c: { var: { orgId: string; org: { plan: string } } }) {
   if (c.var.org.plan !== "free") return null;
-  const monthStart = new Date();
-  monthStart.setUTCDate(1);
-  monthStart.setUTCHours(0, 0, 0, 0);
-  const rows = await db
-    .select({ n: count() })
-    .from(eventsTable)
-    .where(and(eq(eventsTable.orgId, c.var.orgId), gte(eventsTable.createdAt, monthStart)));
-  if ((rows[0]?.n ?? 0) >= FREE_EVENTS_PER_MONTH) {
+  const used = await getUsage(c.var.orgId, "events_created");
+  if (used >= FREE_EVENTS_PER_MONTH) {
     return {
       error: "event_cap_exceeded" as const,
       limit: FREE_EVENTS_PER_MONTH,

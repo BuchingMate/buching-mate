@@ -104,4 +104,34 @@ describe("POST /api/events", () => {
     });
     expect(second.status).toBe(402);
   });
+
+  test("should not reset the free-plan monthly cap when an event is deleted", async () => {
+    const fx = await signUpAndCreateOrg();
+
+    const first = await req("/api/events", {
+      method: "POST",
+      body: validEvent,
+      cookie: fx.cookie,
+      orgId: fx.orgId,
+    });
+    expect(first.status).toBe(201);
+    const { event } = await asJson<{ event: { id: string } }>(first);
+
+    const del = await req(`/api/events/${event.id}`, {
+      method: "DELETE",
+      cookie: fx.cookie,
+      orgId: fx.orgId,
+    });
+    expect(del.status).toBe(200);
+
+    const second = await req("/api/events", {
+      method: "POST",
+      body: { ...validEvent, title: "After delete" },
+      cookie: fx.cookie,
+      orgId: fx.orgId,
+    });
+    expect(second.status).toBe(402);
+    const body = await asJson<{ error: { code: string } }>(second);
+    expect(body.error.code).toBe("event_cap_exceeded");
+  });
 });
