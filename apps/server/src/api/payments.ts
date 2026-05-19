@@ -114,9 +114,17 @@ paymentRoutes.get("/callback/:provider", requireAuth, async (c) => {
   return c.redirect(target, 302);
 });
 
-function buildCallbackUrl(c: { req: { url: string } }, provider: string) {
-  const url = new URL(c.req.url);
-  return `${url.origin}/api/payments/callback/${provider}`;
+function publicOrigin(c: { req: { url: string; header: (n: string) => string | undefined } }) {
+  const envBase = process.env.BETTER_AUTH_URL || process.env.PUBLIC_API_URL;
+  if (envBase) return new URL(envBase).origin;
+  const proto = c.req.header("x-forwarded-proto")?.split(",")[0]?.trim();
+  const host = c.req.header("x-forwarded-host")?.split(",")[0]?.trim() ?? c.req.header("host");
+  if (proto && host) return `${proto}://${host}`;
+  return new URL(c.req.url).origin;
+}
+
+function buildCallbackUrl(c: { req: { url: string; header: (n: string) => string | undefined } }, provider: string) {
+  return `${publicOrigin(c)}/api/payments/callback/${provider}`;
 }
 
 // Tier 3: authenticated org routes.
@@ -144,8 +152,7 @@ paymentRoutes
       userId: c.var.user.id,
       provider: body.provider,
     });
-    const url = new URL(c.req.url);
-    const redirectUri = `${url.origin}/api/payments/callback/${body.provider}`;
+    const redirectUri = `${publicOrigin(c)}/api/payments/callback/${body.provider}`;
     const onboardingUrl = adapter.buildOnboardingUrl({ state: stateToken, redirectUri });
     return c.json({ url: onboardingUrl });
   })
