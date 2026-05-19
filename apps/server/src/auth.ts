@@ -25,6 +25,18 @@ const polarClient = process.env.POLAR_ACCESS_TOKEN
     })
   : null;
 
+const allowedEmailDomains = (process.env.ALLOWED_EMAIL_DOMAINS ?? "")
+  .split(",")
+  .map((d) => d.trim().toLowerCase())
+  .filter(Boolean);
+
+function isEmailDomainAllowed(email: string): boolean {
+  if (allowedEmailDomains.length === 0) return true;
+  const domain = email.split("@")[1]?.toLowerCase();
+  if (!domain) return false;
+  return allowedEmailDomains.includes(domain);
+}
+
 const googleProvider =
   process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET
     ? {
@@ -132,6 +144,36 @@ export const auth = betterAuth({
     enabled: true,
   },
   socialProviders: googleProvider,
+  databaseHooks: {
+    user: {
+      create: {
+        before: async (user) => {
+          if (!isEmailDomainAllowed(user.email)) {
+            throw new Error(
+              `Email domain not allowed. Permitted: ${allowedEmailDomains.join(", ")}`,
+            );
+          }
+          return { data: user };
+        },
+      },
+    },
+    session: {
+      create: {
+        before: async (session) => {
+          const rows = await db
+            .select({ email: schema.user.email })
+            .from(schema.user)
+            .where(eq(schema.user.id, session.userId))
+            .limit(1);
+          const email = rows[0]?.email;
+          if (email && !isEmailDomainAllowed(email)) {
+            throw new Error("Sign-in not allowed for this email domain");
+          }
+          return { data: session };
+        },
+      },
+    },
+  },
   plugins: polarPlugin ? [organizationPlugin, polarPlugin] : [organizationPlugin],
   ...(process.env.COOKIE_DOMAIN
     ? {

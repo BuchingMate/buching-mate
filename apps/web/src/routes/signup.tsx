@@ -16,6 +16,7 @@ import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Separator } from "@/components/ui/separator";
 import { pageHead } from "@/lib/seo";
+import { emailDomainHint, isEmailDomainAllowed } from "@/lib/email-domain";
 
 export const Route = createFileRoute("/signup")({
   component: Signup,
@@ -46,6 +47,11 @@ function Signup() {
 
     if (password !== confirmPassword) {
       setError("Passwords do not match");
+      return;
+    }
+
+    if (!isEmailDomainAllowed(email)) {
+      setError(emailDomainHint() ?? "Email domain not allowed");
       return;
     }
 
@@ -85,6 +91,9 @@ function Signup() {
         <div className="space-y-2 text-center">
           <h1 className="text-2xl font-bold">Create an account</h1>
           <p className="text-muted-foreground">Sign up to get started</p>
+          {emailDomainHint() && (
+            <p className="text-xs text-muted-foreground">{emailDomainHint()}</p>
+          )}
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">

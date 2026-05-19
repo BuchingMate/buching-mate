@@ -15,6 +15,7 @@ import {
   sessionQueryOptions,
 } from "@/queries/auth";
 import { pageHead } from "@/lib/seo";
+import { emailDomainHint, isEmailDomainAllowed } from "@/lib/email-domain";
 
 export const Route = createFileRoute("/login")({
   component: Login,
@@ -57,8 +58,14 @@ function StaffLogin() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
     setError("");
+
+    if (!isEmailDomainAllowed(email)) {
+      setError(emailDomainHint() ?? "Email domain not allowed");
+      return;
+    }
+
+    setLoading(true);
 
     try {
       const result = await authClient.signIn.email({ email, password });
@@ -88,6 +95,9 @@ function StaffLogin() {
         <div className="space-y-2 text-center">
           <h1 className="text-2xl font-bold">Welcome back</h1>
           <p className="text-muted-foreground">Sign in to your account</p>
+          {emailDomainHint() && (
+            <p className="text-xs text-muted-foreground">{emailDomainHint()}</p>
+          )}
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
