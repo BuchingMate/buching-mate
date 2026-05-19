@@ -47,8 +47,17 @@ type ViewMode = "list" | "kanban";
 type EventSegment = "active" | "archived";
 type ResourceAssignmentDraft = { resourceId: string; role: string; quantity: number };
 
-const statuses: EventStatus[] = ["upcoming", "completed", "cancelled"];
-const visibilities: EventVisibility[] = ["unpublished", "published"];
+const statusLabels: Record<EventStatus, string> = {
+  upcoming: "Upcoming",
+  completed: "Completed",
+  cancelled: "Cancelled",
+};
+const visibilityLabels: Record<EventVisibility, string> = {
+  unpublished: "Unpublished",
+  published: "Published",
+};
+const statuses = Object.keys(statusLabels) as EventStatus[];
+const visibilities = Object.keys(visibilityLabels) as EventVisibility[];
 const ITEMS_PER_PAGE = 10;
 
 const sortLabels: Record<SortKey, string> = {
@@ -373,7 +382,11 @@ function Events() {
                   <div className="space-y-4">
                     <div className="space-y-2">
                       <Label className="text-xs font-medium text-foreground">Sort by</Label>
-                      <Select value={sortKey} onValueChange={(v) => setSortKey(v as SortKey)}>
+                      <Select
+                        value={sortKey}
+                        onValueChange={(v) => setSortKey(v as SortKey)}
+                        items={sortLabels}
+                      >
                         <SelectTrigger className="h-9 w-full text-sm">
                           <SelectValue />
                         </SelectTrigger>
@@ -409,7 +422,11 @@ function Events() {
 
                       <div className="space-y-2">
                         <Label className="text-xs font-medium text-foreground">Status</Label>
-                        <Select value={status} onValueChange={(v) => v && setStatus(v)}>
+                        <Select
+                          value={status}
+                          onValueChange={(v) => v && setStatus(v)}
+                          items={{ all: "All statuses", ...statusLabels }}
+                        >
                           <SelectTrigger className="h-9 w-full text-sm">
                             <SelectValue />
                           </SelectTrigger>
@@ -417,7 +434,7 @@ function Events() {
                             <SelectItem value="all">All statuses</SelectItem>
                             {statuses.map((s) => (
                               <SelectItem key={s} value={s}>
-                                {s}
+                                {statusLabels[s]}
                               </SelectItem>
                             ))}
                           </SelectContent>
@@ -426,7 +443,11 @@ function Events() {
 
                       <div className="space-y-2">
                         <Label className="text-xs font-medium text-foreground">Visibility</Label>
-                        <Select value={visibility} onValueChange={(v) => v && setVisibility(v)}>
+                        <Select
+                          value={visibility}
+                          onValueChange={(v) => v && setVisibility(v)}
+                          items={{ all: "All visibilities", ...visibilityLabels }}
+                        >
                           <SelectTrigger className="h-9 w-full text-sm">
                             <SelectValue />
                           </SelectTrigger>
@@ -434,7 +455,7 @@ function Events() {
                             <SelectItem value="all">All visibilities</SelectItem>
                             {visibilities.map((v) => (
                               <SelectItem key={v} value={v}>
-                                {v}
+                                {visibilityLabels[v]}
                               </SelectItem>
                             ))}
                           </SelectContent>

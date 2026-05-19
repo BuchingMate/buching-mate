@@ -7,13 +7,15 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
-export const paymentStatuses: PaymentStatus[] = [
-  "not_required",
-  "pending",
-  "paid",
-  "refunded",
-  "expired",
-];
+export const paymentStatusLabels: Record<PaymentStatus, string> = {
+  not_required: "Not required",
+  pending: "Pending",
+  paid: "Paid",
+  refunded: "Refunded",
+  expired: "Expired",
+  failed: "Failed",
+};
+export const paymentStatuses = Object.keys(paymentStatusLabels) as PaymentStatus[];
 
 export function RegistrationSummary({
   event,
@@ -79,6 +81,7 @@ export function PaymentStatusSelect({
       value={value}
       onValueChange={(value) => onChange(value as PaymentStatus)}
       disabled={disabled}
+      items={paymentStatusLabels}
     >
       <SelectTrigger className="w-40">
         <SelectValue />
@@ -86,7 +89,7 @@ export function PaymentStatusSelect({
       <SelectContent>
         {paymentStatuses.map((status) => (
           <SelectItem key={status} value={status}>
-            {status}
+            {paymentStatusLabels[status]}
           </SelectItem>
         ))}
       </SelectContent>

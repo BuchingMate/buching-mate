@@ -28,8 +28,17 @@ import type { EventFormState } from "@/lib/events";
 
 type ResourceAssignmentDraft = { resourceId: string; role: string; quantity: number };
 
-const statuses: EventStatus[] = ["upcoming", "completed", "cancelled"];
-const visibilities: EventVisibility[] = ["unpublished", "published"];
+const statusLabels: Record<EventStatus, string> = {
+  upcoming: "Upcoming",
+  completed: "Completed",
+  cancelled: "Cancelled",
+};
+const visibilityLabels: Record<EventVisibility, string> = {
+  unpublished: "Unpublished",
+  published: "Published",
+};
+const statuses = Object.keys(statusLabels) as EventStatus[];
+const visibilities = Object.keys(visibilityLabels) as EventVisibility[];
 
 type StepKey = "basics" | "images" | "details" | "schedule" | "resources";
 
@@ -261,6 +270,7 @@ function BasicsSection({ form, onChange }: EventFormProps) {
           <Select
             value={form.visibility}
             onValueChange={(value) => onChange("visibility", value as EventVisibility)}
+            items={visibilityLabels}
           >
             <SelectTrigger>
               <SelectValue />
@@ -268,7 +278,7 @@ function BasicsSection({ form, onChange }: EventFormProps) {
             <SelectContent alignItemWithTrigger={false}>
               {visibilities.map((v) => (
                 <SelectItem key={v} value={v}>
-                  {v}
+                  {visibilityLabels[v]}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -279,6 +289,7 @@ function BasicsSection({ form, onChange }: EventFormProps) {
           <Select
             value={form.status}
             onValueChange={(value) => onChange("status", value as EventStatus)}
+            items={statusLabels}
           >
             <SelectTrigger>
               <SelectValue />
@@ -286,7 +297,7 @@ function BasicsSection({ form, onChange }: EventFormProps) {
             <SelectContent alignItemWithTrigger={false}>
               {statuses.map((s) => (
                 <SelectItem key={s} value={s}>
-                  {s}
+                  {statusLabels[s]}
                 </SelectItem>
               ))}
             </SelectContent>
