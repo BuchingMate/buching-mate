@@ -1,5 +1,6 @@
 import { Resend } from "resend";
 import { getLogger } from "../../observability/request-context";
+import { buildEventIcs } from "../../lib/ics";
 
 let resend: Resend | null = null;
 
@@ -47,6 +48,12 @@ export async function sendBookingConfirmationEmail({
   eventTime,
   location,
   registrationId,
+  joinUrl,
+  startUtc,
+  endUtc,
+  organizerEmail,
+  eventId,
+  description,
 }: {
   to: string;
   attendeeName: string;
@@ -56,6 +63,12 @@ export async function sendBookingConfirmationEmail({
   eventTime: string;
   location: string | null;
   registrationId: string;
+  joinUrl?: string | null;
+  startUtc?: Date | null;
+  endUtc?: Date | null;
+  organizerEmail?: string | null;
+  eventId?: string;
+  description?: string | null;
 }) {
   if (!process.env.RESEND_API_KEY || !process.env.RESEND_FROM_EMAIL) {
     getLogger().info(
@@ -64,6 +77,28 @@ export async function sendBookingConfirmationEmail({
     );
     return;
   }
+
+  const icsAttachment =
+    startUtc && endUtc
+      ? {
+          filename: "event.ics",
+          contentType: "text/calendar",
+          content: Buffer.from(
+            buildEventIcs({
+              uid: `${eventId ?? registrationId}@buchingmate`,
+              title: eventTitle,
+              description: description ?? null,
+              startUtc,
+              endUtc,
+              location,
+              joinUrl: joinUrl ?? null,
+              organizerEmail: organizerEmail ?? null,
+              organizerName: orgName,
+            }),
+            "utf8",
+          ).toString("base64"),
+        }
+      : null;
 
   try {
     await getResend()?.emails.send({
@@ -78,7 +113,9 @@ export async function sendBookingConfirmationEmail({
         eventTime,
         location,
         registrationId,
+        joinUrl: joinUrl ?? null,
       }),
+      attachments: icsAttachment ? [icsAttachment] : undefined,
     });
   } catch (err) {
     getLogger().warn({ err, to, eventTitle, registrationId }, "confirmation email send failed");
@@ -144,6 +181,7 @@ function renderConfirmationHtml({
   eventTime,
   location,
   registrationId,
+  joinUrl,
 }: {
   attendeeName: string;
   eventTitle: string;
@@ -152,7 +190,16 @@ function renderConfirmationHtml({
   eventTime: string;
   location: string | null;
   registrationId: string;
+  joinUrl: string | null;
 }) {
+  const joinButton = joinUrl
+    ? `
+                <div style="margin:0 0 20px 0;">
+                  <a href="${joinUrl}" style="display:inline-block;background:#2563eb;color:#ffffff;text-decoration:none;padding:11px 20px;border-radius:8px;font-size:14px;font-weight:500;">Join Zoom meeting</a>
+                  <p style="margin:8px 0 0 0;font-size:12px;color:#94a3b8;word-break:break-all;">${joinUrl}</p>
+                </div>
+      `
+    : "";
   const locationRow = location
     ? `
                 <tr>
@@ -178,6 +225,7 @@ function renderConfirmationHtml({
                 <p style="margin:0 0 24px 0;font-size:15px;line-height:1.55;color:#475569;">
                   Hi ${escapeHtml(attendeeName)}, your booking for <strong>${escapeHtml(eventTitle)}</strong> at ${escapeHtml(orgName)} is confirmed.
                 </p>
+                ${joinButton}
                 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-top:1px solid #e2e8f0;border-bottom:1px solid #e2e8f0;margin:0 0 20px 0;">
                   <tr>
                     <td style="padding:14px 0 8px 0;color:#64748b;font-size:14px;">Date</td>

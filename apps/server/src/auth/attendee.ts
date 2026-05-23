@@ -5,6 +5,7 @@ import { Resend } from "resend";
 import { db } from "../db";
 import { attendeeSession, attendeeUser, attendeeVerification } from "../db/auth-schema";
 import { getLogger } from "../observability/request-context";
+import { BETTER_AUTH_URL, TRUSTED_ORIGINS } from "../env";
 
 let resend: Resend | null = null;
 
@@ -65,27 +66,6 @@ function renderMagicLinkHtml(url: string) {
   `.trim();
 }
 
-function buildTrustedOrigins() {
-  const webUrl = process.env.WEB_URL || "http://localhost:5678";
-  const publicSiteUrl = process.env.PUBLIC_SITE_URL || webUrl;
-  const origins = new Set<string>([webUrl, publicSiteUrl]);
-
-  try {
-    const parsed = new URL(publicSiteUrl);
-    origins.add(`${parsed.protocol}//*.${parsed.host}`);
-  } catch {
-    // ignore
-  }
-
-  // Dev wildcard helpers.
-  origins.add("http://*.lvh.me:5678");
-  origins.add("http://*.localhost:5678");
-
-  return Array.from(origins);
-}
-
-const trustedOrigins = buildTrustedOrigins();
-
 export const attendeeAuth = betterAuth({
   database: drizzleAdapter(db, {
     provider: "pg",
@@ -96,9 +76,9 @@ export const attendeeAuth = betterAuth({
     },
   }),
   secret: process.env.BETTER_AUTH_SECRET,
-  baseURL: process.env.BETTER_AUTH_URL,
+  baseURL: BETTER_AUTH_URL,
   basePath: "/api/public/auth",
-  trustedOrigins,
+  trustedOrigins: TRUSTED_ORIGINS,
   advanced: {
     cookiePrefix: "bm-attendee",
   },

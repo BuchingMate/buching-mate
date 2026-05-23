@@ -16,7 +16,7 @@
     "format": "oxfmt . --write",
     "format:check": "oxfmt . --check",
     "typecheck": "tsc --noEmit",
-    "test:db:setup": "docker exec -i buching-db psql -U booking_mate -d postgres -c \"DROP DATABASE IF EXISTS buching_test;\" -c \"DROP ROLE IF EXISTS buchingmate;\" -c \"CREATE ROLE buchingmate WITH LOGIN PASSWORD 'buchingmate_password123';\" -c \"CREATE DATABASE buching_test OWNER buchingmate;\"",
+    "test:db:setup": "docker exec -i buching-mate-db psql -U booking_mate -d postgres -c \"DROP DATABASE IF EXISTS buching_test;\" -c \"DROP ROLE IF EXISTS buchingmate;\" -c \"CREATE ROLE buchingmate WITH LOGIN PASSWORD 'buchingmate_password123';\" -c \"CREATE DATABASE buching_test OWNER buchingmate;\"",
     "test": "bun --env-file=.env.test test"
   },
   "dependencies": {

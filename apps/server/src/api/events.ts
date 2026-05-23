@@ -22,6 +22,7 @@ import {
 } from "../services/events";
 import { listRegistrationsByEvent } from "../services/registrations";
 import { getUsage } from "../services/subscription-usage";
+import { bulkImportRegistrations, type ImportRow } from "../services/registrations/import";
 
 const FREE_EVENTS_PER_MONTH = 1;
 
@@ -235,6 +236,34 @@ export const eventRoutes = new Hono<ApiEnv>()
   .get("/:eventId/registrations", async (c) =>
     c.json({ registrations: await listRegistrationsByEvent(c.var.orgId, c.req.param("eventId")) }),
   )
+  .post("/:eventId/registrations/import", requireRole("manager"), async (c) => {
+    const body = (await readJson(c)) as Record<string, unknown> | null;
+    if (!isRecord(body) || !Array.isArray(body.rows)) {
+      return apiError(c, 400, "invalid_import", "rows must be an array");
+    }
+    if (body.rows.length > 5000) {
+      return apiError(c, 400, "too_many_rows", "Max 5000 rows per import");
+    }
+    const rows: ImportRow[] = [];
+    for (const r of body.rows) {
+      if (!isRecord(r)) {
+        return apiError(c, 400, "invalid_row", "Each row must be an object");
+      }
+      rows.push({
+        name: typeof r.name === "string" ? r.name : "",
+        email: typeof r.email === "string" ? r.email : "",
+        phone: typeof r.phone === "string" ? r.phone : null,
+      });
+    }
+    const result = await bulkImportRegistrations(
+      c.var.orgId,
+      c.req.param("eventId"),
+      rows,
+    );
+    if (result === "event_not_found")
+      return apiError(c, 404, "event_not_found", "Event not found");
+    return c.json(result);
+  })
   .get("/:eventId/resources", async (c) =>
     c.json({ resources: await listEventResources(c.var.orgId, c.req.param("eventId")) }),
   )
