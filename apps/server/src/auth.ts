@@ -17,6 +17,7 @@ import {
   handleSubscriptionUpdated,
 } from "./ee/billing/webhook";
 import { syncSeatCount } from "./ee/billing/polar";
+import { BETTER_AUTH_URL, TRUSTED_ORIGINS, WEB_URL } from "./env";
 
 const polarClient = process.env.POLAR_ACCESS_TOKEN
   ? new Polar({
@@ -94,8 +95,7 @@ const organizationPlugin = organization({
     return Number.MAX_SAFE_INTEGER;
   },
   sendInvitationEmail: async (data) => {
-    const webUrl = process.env.WEB_URL || "http://localhost:5678";
-    const inviteLink = `${webUrl}/invite/${data.id}`;
+    const inviteLink = `${WEB_URL}/invite/${data.id}`;
     await sendInviteEmail({
       email: data.email,
       organizationName: data.organization.name,
@@ -109,11 +109,10 @@ const teamProductId = process.env.POLAR_PRODUCT_TEAM;
 const polarPlugin = polarClient
   ? polar({
       client: polarClient,
-      createCustomerOnSignUp: true,
       use: [
         checkout({
           products: teamProductId ? [{ productId: teamProductId, slug: "team" }] : [],
-          successUrl: `${process.env.WEB_URL}/admin?tab=billing&success=1`,
+          successUrl: `${WEB_URL}/admin?tab=billing&success=1`,
           authenticatedUsersOnly: true,
         }),
         portal(),
@@ -135,11 +134,8 @@ export const auth = betterAuth({
     schema,
   }),
   secret: process.env.BETTER_AUTH_SECRET,
-  baseURL: process.env.BETTER_AUTH_URL,
-  trustedOrigins: (process.env.TRUSTED_ORIGINS ?? process.env.WEB_URL ?? "http://localhost:5678")
-    .split(",")
-    .map((origin) => origin.trim())
-    .filter(Boolean),
+  baseURL: BETTER_AUTH_URL,
+  trustedOrigins: TRUSTED_ORIGINS,
   emailAndPassword: {
     enabled: true,
   },

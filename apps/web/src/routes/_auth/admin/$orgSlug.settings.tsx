@@ -8,6 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   canDeleteOrg,
   canManageBilling,
+  canManageConnectedApps,
   canManagePayments,
   canManageSettings,
   canManageWebhooks,
@@ -18,6 +19,7 @@ import { CategoriesTab } from "./~components/settings/categories-tab";
 import { WebhooksTab } from "./~components/settings/webhooks-tab";
 import { MembersTab } from "./~components/settings/members-tab";
 import { PaymentsTab } from "./~components/settings/payments-tab";
+import { VideoTab } from "./~components/settings/video-tab";
 import { BillingTab } from "./~components/settings/billing-tab";
 import { DangerTab } from "./~components/settings/danger-tab";
 
@@ -29,6 +31,7 @@ const VALID_TABS = [
   "categories",
   "webhooks",
   "payments",
+  "video",
   "billing",
   "members",
   "danger",
@@ -93,11 +96,12 @@ function SettingsTabs({
   const [tab, setTab] = useState<SettingsTab>(initialTab);
   const showDanger = canDeleteOrg(role);
   const showPayments = canManagePayments(role);
+  const showConnectedApps = canManageConnectedApps(role);
   const showWebhooks = canManageWebhooks(role);
   const showBilling = BILLING_ENABLED && canManageBilling(role);
 
   return (
-    <div className="mx-auto max-w-3xl">
+    <div className="mx-auto max-w-5xl">
       <Tabs
         value={tab}
         onValueChange={(v) => {
@@ -109,6 +113,7 @@ function SettingsTabs({
           <TabsTrigger value="categories">Categories</TabsTrigger>
           {showWebhooks && <TabsTrigger value="webhooks">Webhooks</TabsTrigger>}
           {showPayments && <TabsTrigger value="payments">Payments</TabsTrigger>}
+          {showConnectedApps && <TabsTrigger value="video">Connected apps</TabsTrigger>}
           {showBilling && <TabsTrigger value="billing">Billing</TabsTrigger>}
           <TabsTrigger value="members">Members</TabsTrigger>
           {showDanger && <TabsTrigger value="danger">Danger</TabsTrigger>}
@@ -128,6 +133,11 @@ function SettingsTabs({
         {showPayments && (
           <TabsContent value="payments" className="mt-6">
             <PaymentsTab />
+          </TabsContent>
+        )}
+        {showConnectedApps && (
+          <TabsContent value="video" className="mt-6">
+            <VideoTab />
           </TabsContent>
         )}
         {showBilling && (

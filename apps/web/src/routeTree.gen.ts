@@ -34,6 +34,7 @@ import { Route as AuthAdminAttendeesAttendeeIdRouteImport } from './routes/_auth
 import { Route as AuthAdminOrgSlugSettingsRouteImport } from './routes/_auth/admin/$orgSlug.settings'
 import { Route as AuthAdminEventsEventIdIndexRouteImport } from './routes/_auth/admin/events/$eventId/index'
 import { Route as AuthAdminEventsEventIdEditRouteImport } from './routes/_auth/admin/events/$eventId/edit'
+import { Route as AuthAdminEventsEventIdAttendanceRouteImport } from './routes/_auth/admin/events/$eventId/attendance'
 
 const SignupRoute = SignupRouteImport.update({
   id: '/signup',
@@ -163,6 +164,12 @@ const AuthAdminEventsEventIdEditRoute =
     path: '/events/$eventId/edit',
     getParentRoute: () => AuthAdminRoute,
   } as any)
+const AuthAdminEventsEventIdAttendanceRoute =
+  AuthAdminEventsEventIdAttendanceRouteImport.update({
+    id: '/events/$eventId/attendance',
+    path: '/events/$eventId/attendance',
+    getParentRoute: () => AuthAdminRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -186,6 +193,7 @@ export interface FileRoutesByFullPath {
   '/admin/attendees/': typeof AuthAdminAttendeesIndexRoute
   '/admin/events/': typeof AuthAdminEventsIndexRoute
   '/admin/resources/': typeof AuthAdminResourcesIndexRoute
+  '/admin/events/$eventId/attendance': typeof AuthAdminEventsEventIdAttendanceRoute
   '/admin/events/$eventId/edit': typeof AuthAdminEventsEventIdEditRoute
   '/admin/events/$eventId/': typeof AuthAdminEventsEventIdIndexRoute
 }
@@ -210,6 +218,7 @@ export interface FileRoutesByTo {
   '/admin/attendees': typeof AuthAdminAttendeesIndexRoute
   '/admin/events': typeof AuthAdminEventsIndexRoute
   '/admin/resources': typeof AuthAdminResourcesIndexRoute
+  '/admin/events/$eventId/attendance': typeof AuthAdminEventsEventIdAttendanceRoute
   '/admin/events/$eventId/edit': typeof AuthAdminEventsEventIdEditRoute
   '/admin/events/$eventId': typeof AuthAdminEventsEventIdIndexRoute
 }
@@ -238,6 +247,7 @@ export interface FileRoutesById {
   '/_auth/admin/attendees/': typeof AuthAdminAttendeesIndexRoute
   '/_auth/admin/events/': typeof AuthAdminEventsIndexRoute
   '/_auth/admin/resources/': typeof AuthAdminResourcesIndexRoute
+  '/_auth/admin/events/$eventId/attendance': typeof AuthAdminEventsEventIdAttendanceRoute
   '/_auth/admin/events/$eventId/edit': typeof AuthAdminEventsEventIdEditRoute
   '/_auth/admin/events/$eventId/': typeof AuthAdminEventsEventIdIndexRoute
 }
@@ -265,6 +275,7 @@ export interface FileRouteTypes {
     | '/admin/attendees/'
     | '/admin/events/'
     | '/admin/resources/'
+    | '/admin/events/$eventId/attendance'
     | '/admin/events/$eventId/edit'
     | '/admin/events/$eventId/'
   fileRoutesByTo: FileRoutesByTo
@@ -289,6 +300,7 @@ export interface FileRouteTypes {
     | '/admin/attendees'
     | '/admin/events'
     | '/admin/resources'
+    | '/admin/events/$eventId/attendance'
     | '/admin/events/$eventId/edit'
     | '/admin/events/$eventId'
   id:
@@ -316,6 +328,7 @@ export interface FileRouteTypes {
     | '/_auth/admin/attendees/'
     | '/_auth/admin/events/'
     | '/_auth/admin/resources/'
+    | '/_auth/admin/events/$eventId/attendance'
     | '/_auth/admin/events/$eventId/edit'
     | '/_auth/admin/events/$eventId/'
   fileRoutesById: FileRoutesById
@@ -511,6 +524,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthAdminEventsEventIdEditRouteImport
       parentRoute: typeof AuthAdminRoute
     }
+    '/_auth/admin/events/$eventId/attendance': {
+      id: '/_auth/admin/events/$eventId/attendance'
+      path: '/events/$eventId/attendance'
+      fullPath: '/admin/events/$eventId/attendance'
+      preLoaderRoute: typeof AuthAdminEventsEventIdAttendanceRouteImport
+      parentRoute: typeof AuthAdminRoute
+    }
   }
 }
 
@@ -535,6 +555,7 @@ interface AuthAdminRouteChildren {
   AuthAdminAttendeesIndexRoute: typeof AuthAdminAttendeesIndexRoute
   AuthAdminEventsIndexRoute: typeof AuthAdminEventsIndexRoute
   AuthAdminResourcesIndexRoute: typeof AuthAdminResourcesIndexRoute
+  AuthAdminEventsEventIdAttendanceRoute: typeof AuthAdminEventsEventIdAttendanceRoute
   AuthAdminEventsEventIdEditRoute: typeof AuthAdminEventsEventIdEditRoute
   AuthAdminEventsEventIdIndexRoute: typeof AuthAdminEventsEventIdIndexRoute
 }
@@ -548,6 +569,7 @@ const AuthAdminRouteChildren: AuthAdminRouteChildren = {
   AuthAdminAttendeesIndexRoute: AuthAdminAttendeesIndexRoute,
   AuthAdminEventsIndexRoute: AuthAdminEventsIndexRoute,
   AuthAdminResourcesIndexRoute: AuthAdminResourcesIndexRoute,
+  AuthAdminEventsEventIdAttendanceRoute: AuthAdminEventsEventIdAttendanceRoute,
   AuthAdminEventsEventIdEditRoute: AuthAdminEventsEventIdEditRoute,
   AuthAdminEventsEventIdIndexRoute: AuthAdminEventsEventIdIndexRoute,
 }

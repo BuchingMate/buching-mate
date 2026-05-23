@@ -70,6 +70,19 @@ export const webhookDeliveryStatus = pgEnum("webhook_delivery_status", [
   "failed",
   "dead_letter",
 ]);
+export const videoProvider = pgEnum("video_provider", ["zoom"]);
+export const videoConnectionStatus = pgEnum("video_connection_status", [
+  "active",
+  "revoked",
+  "error",
+]);
+export const eventRegistrantStatus = pgEnum("event_registrant_status", [
+  "registered",
+  "cancelled",
+  "attended",
+  "no_show",
+]);
+export const zoomAccountType = pgEnum("zoom_account_type", ["basic", "licensed", "on_prem"]);
 
 export const orgSettings = pgTable(
   "org_settings",
@@ -481,6 +494,139 @@ export const webhookDeliveries = pgTable(
   (table) => [
     index("webhook_deliveries_org_id_idx").on(table.orgId),
     index("webhook_deliveries_org_status_idx").on(table.orgId, table.status),
+  ],
+);
+
+export const videoConnections = pgTable(
+  "video_connections",
+  {
+    id: id(),
+    orgId: text("org_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    provider: videoProvider("provider").notNull(),
+    accountId: text("account_id").notNull(),
+    status: videoConnectionStatus("status").notNull().default("active"),
+    metadata: jsonb("metadata").$type<Record<string, unknown>>().notNull().default({}),
+    revokedAt: timestamp("revoked_at"),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (table) => [uniqueIndex("video_connections_org_provider_idx").on(table.orgId, table.provider)],
+);
+
+export const zoomVideoAccounts = pgTable(
+  "zoom_video_accounts",
+  {
+    id: id(),
+    connectionId: text("connection_id")
+      .notNull()
+      .references(() => videoConnections.id, { onDelete: "cascade" }),
+    zoomUserId: text("zoom_user_id").notNull(),
+    zoomAccountId: text("zoom_account_id").notNull(),
+    email: text("email"),
+    accountType: zoomAccountType("account_type").notNull().default("basic"),
+    accessTokenEncrypted: byteaCol("access_token_encrypted").notNull(),
+    refreshTokenEncrypted: byteaCol("refresh_token_encrypted").notNull(),
+    tokenExpiresAt: timestamp("token_expires_at").notNull(),
+    scopes: jsonb("scopes").$type<string[]>().notNull().default([]),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (table) => [
+    uniqueIndex("zoom_video_accounts_connection_idx").on(table.connectionId),
+    uniqueIndex("zoom_video_accounts_user_idx").on(table.zoomUserId),
+  ],
+);
+
+export const eventVideo = pgTable(
+  "event_video",
+  {
+    id: id(),
+    orgId: text("org_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    eventId: text("event_id")
+      .notNull()
+      .references(() => events.id, { onDelete: "cascade" }),
+    provider: videoProvider("provider").notNull(),
+    connectionId: text("connection_id")
+      .notNull()
+      .references(() => videoConnections.id, { onDelete: "cascade" }),
+    externalMeetingId: text("external_meeting_id").notNull(),
+    externalMeetingUuid: text("external_meeting_uuid"),
+    joinUrl: text("join_url").notNull(),
+    hostStartUrlEncrypted: byteaCol("host_start_url_encrypted"),
+    passcodeEncrypted: byteaCol("passcode_encrypted"),
+    registrationEnabled: boolean("registration_enabled").notNull().default(false),
+    raw: jsonb("raw").$type<Record<string, unknown>>(),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (table) => [
+    uniqueIndex("event_video_event_idx").on(table.eventId),
+    index("event_video_org_idx").on(table.orgId),
+    index("event_video_connection_idx").on(table.connectionId),
+    index("event_video_uuid_idx").on(table.externalMeetingUuid),
+  ],
+);
+
+export const eventRegistrants = pgTable(
+  "event_registrants",
+  {
+    id: id(),
+    orgId: text("org_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    eventId: text("event_id")
+      .notNull()
+      .references(() => events.id, { onDelete: "cascade" }),
+    registrationId: text("registration_id")
+      .notNull()
+      .references(() => registrations.id, { onDelete: "cascade" }),
+    provider: videoProvider("provider").notNull(),
+    externalRegistrantId: text("external_registrant_id"),
+    joinUrlEncrypted: byteaCol("join_url_encrypted"),
+    email: text("email").notNull(),
+    firstName: text("first_name"),
+    lastName: text("last_name"),
+    status: eventRegistrantStatus("status").notNull().default("registered"),
+    attended: boolean("attended").notNull().default(false),
+    joinTime: timestamp("join_time"),
+    leaveTime: timestamp("leave_time"),
+    durationSeconds: integer("duration_seconds"),
+    ipAddress: text("ip_address"),
+    country: text("country"),
+    city: text("city"),
+    device: text("device"),
+    networkType: text("network_type"),
+    raw: jsonb("raw").$type<Record<string, unknown>>(),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (table) => [
+    uniqueIndex("event_registrants_event_registration_idx").on(table.eventId, table.registrationId),
+    index("event_registrants_event_idx").on(table.eventId),
+    index("event_registrants_org_idx").on(table.orgId),
+    index("event_registrants_email_idx").on(table.eventId, table.email),
+  ],
+);
+
+export const reminderKind = pgEnum("reminder_kind", ["t24h", "t1h"]);
+
+export const registrationReminders = pgTable(
+  "registration_reminders",
+  {
+    id: id(),
+    registrationId: text("registration_id")
+      .notNull()
+      .references(() => registrations.id, { onDelete: "cascade" }),
+    kind: reminderKind("kind").notNull(),
+    sentAt: timestamp("sent_at").notNull().defaultNow(),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    uniqueIndex("registration_reminders_reg_kind_idx").on(table.registrationId, table.kind),
   ],
 );
 

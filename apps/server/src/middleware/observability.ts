@@ -3,15 +3,9 @@ import type { MiddlewareHandler } from "hono";
 import { logger as rootLogger } from "../observability/logger";
 import { als } from "../observability/request-context";
 import { BUSINESS_SLUG } from "../branding";
+import { PUBLIC_HOST_SUFFIXES as PLATFORM_HOST_SUFFIXES } from "../env";
 
 const tracer = trace.getTracer(`${BUSINESS_SLUG}-server`);
-
-const PLATFORM_HOST_SUFFIXES = (
-  process.env.PLATFORM_HOST_SUFFIXES ?? ".lvh.me,.localhost,localhost"
-)
-  .split(",")
-  .map((s) => s.trim())
-  .filter(Boolean);
 
 function isCustomDomain(host: string | null): boolean {
   if (!host) return false;

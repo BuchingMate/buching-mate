@@ -6,6 +6,7 @@ import type { ApiEnv } from "./types";
 import { requireAuth, requireOrg, requireRole } from "../middleware/auth";
 import { logEvent } from "../observability/events";
 import { enrichLogger, getLogger } from "../observability/request-context";
+import { SERVER_URL, WEB_URL } from "../env";
 import {
   deletePaymentConnection,
   listPaymentConnections,
@@ -106,17 +107,15 @@ paymentRoutes.get("/callback/:provider", requireAuth, async (c) => {
     connectionId,
   });
 
-  const webBase = Bun.env.WEB_URL || "http://localhost:5678";
   const slug = c.req.query("slug") ?? "";
   const target = slug
-    ? `${webBase}/admin/${slug}/settings?tab=payments&connected=${state.provider}`
-    : `${webBase}/admin?connected=${state.provider}`;
+    ? `${WEB_URL}/admin/${slug}/settings?tab=payments&connected=${state.provider}`
+    : `${WEB_URL}/admin?connected=${state.provider}`;
   return c.redirect(target, 302);
 });
 
 function publicOrigin(c: { req: { url: string; header: (n: string) => string | undefined } }) {
-  const envBase = process.env.BETTER_AUTH_URL || process.env.PUBLIC_API_URL;
-  if (envBase) return new URL(envBase).origin;
+  if (SERVER_URL) return new URL(SERVER_URL).origin;
   const proto = c.req.header("x-forwarded-proto")?.split(",")[0]?.trim();
   const host = c.req.header("x-forwarded-host")?.split(",")[0]?.trim() ?? c.req.header("host");
   if (proto && host) return `${proto}://${host}`;

@@ -13,6 +13,7 @@ import { getLogger } from "../../observability/request-context";
 import { getAdapter, isAdapterAvailable } from "../../payments/registry";
 import { InvalidSignatureError, type NormalizedPaymentEvent } from "../../payments/adapter";
 import { sendBookingConfirmationEmail } from "../registrations/email";
+import { addZoomRegistrant, cancelZoomRegistrant, getEventVideo } from "../video";
 
 export type WebhookOutcome =
   | { type: "ok" }
@@ -31,6 +32,11 @@ type ConfirmationEmail = {
   eventTime: string;
   location: string | null;
   registrationId: string;
+  joinUrl?: string | null;
+  startUtc?: Date | null;
+  endUtc?: Date | null;
+  eventId?: string;
+  description?: string | null;
 };
 
 export async function handleWebhook(input: {
@@ -76,8 +82,12 @@ export async function handleWebhook(input: {
       return { type: "duplicate" as const, confirmation: null };
     }
 
-    const confirmation = await applyEvent(tx, input.provider, normalized);
-    return { type: "ok" as const, confirmation };
+    const applied = await applyEvent(tx, input.provider, normalized);
+    return {
+      type: "ok" as const,
+      confirmation: applied.confirmation,
+      cancelledRegistrations: applied.cancelledRegistrations,
+    };
   });
 
   if (result.type === "duplicate") return { type: "duplicate" };
@@ -86,28 +96,55 @@ export async function handleWebhook(input: {
     await sendBookingConfirmationEmail(result.confirmation);
   }
 
+  for (const { orgId, registrationId } of result.cancelledRegistrations) {
+    try {
+      await cancelZoomRegistrant(orgId, registrationId);
+    } catch (err) {
+      getLogger().warn(
+        { err, orgId, registrationId },
+        "webhook.zoomCancelRegistrantFailed",
+      );
+    }
+  }
+
   return { type: "ok" };
 }
 
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
+type AppliedEvent = {
+  confirmation: ConfirmationEmail | null;
+  cancelledRegistrations: Array<{ orgId: string; registrationId: string }>;
+};
+
 async function applyEvent(
   tx: Tx,
   provider: string,
   event: NormalizedPaymentEvent,
-): Promise<ConfirmationEmail | null> {
+): Promise<AppliedEvent> {
   switch (event.type) {
-    case "payment.completed":
-      return await markPaid(tx, event);
-    case "payment.expired":
-      await markStatus(tx, event, { paymentStatus: "expired", status: "cancelled" });
-      return null;
-    case "payment.failed":
-      await markStatus(tx, event, { paymentStatus: "failed", status: "cancelled" });
-      return null;
-    case "payment.refunded":
-      await applyRefund(tx, provider, event);
-      return null;
+    case "payment.completed": {
+      const confirmation = await markPaid(tx, event);
+      return { confirmation, cancelledRegistrations: [] };
+    }
+    case "payment.expired": {
+      const cancelled = await markStatus(tx, event, {
+        paymentStatus: "expired",
+        status: "cancelled",
+      });
+      return { confirmation: null, cancelledRegistrations: cancelled };
+    }
+    case "payment.failed": {
+      const cancelled = await markStatus(tx, event, {
+        paymentStatus: "failed",
+        status: "cancelled",
+      });
+      return { confirmation: null, cancelledRegistrations: cancelled };
+    }
+    case "payment.refunded": {
+      const cancelled = await applyRefund(tx, provider, event);
+      return { confirmation: null, cancelledRegistrations: cancelled };
+    }
   }
 }
 
@@ -143,6 +180,10 @@ async function markPaid(
       eventDate: eventsTable.date,
       eventTime: eventsTable.time,
       location: eventsTable.location,
+      orgId: registrations.orgId,
+      eventId: registrations.eventId,
+      duration: eventsTable.duration,
+      description: eventsTable.description,
     })
     .from(registrations)
     .innerJoin(attendees, eq(registrations.attendeeId, attendees.id))
@@ -154,9 +195,28 @@ async function markPaid(
   const details = detailRows[0];
   if (!details) return null;
 
+  let joinUrl: string | null = null;
+  try {
+    joinUrl = await addZoomRegistrant(details.orgId, registration.id);
+  } catch {
+    // fall through
+  }
+  if (!joinUrl) {
+    const video = await getEventVideo(details.orgId, details.eventId);
+    joinUrl = video?.joinUrl ?? null;
+  }
+  const hhmm = details.eventTime.length >= 5 ? details.eventTime.slice(0, 5) : "00:00";
+  const startUtc = new Date(`${details.eventDate}T${hhmm}:00Z`);
+  const endUtc = new Date(startUtc.getTime() + Math.max(1, details.duration) * 60_000);
+  const { orgId: _o, eventId, duration: _d, description, ...emailFields } = details;
   return {
-    ...details,
+    ...emailFields,
     registrationId: registration.id,
+    joinUrl,
+    startUtc,
+    endUtc,
+    eventId,
+    description,
   };
 }
 
@@ -164,23 +224,25 @@ async function markStatus(
   tx: Tx,
   event: NormalizedPaymentEvent,
   set: { paymentStatus: "expired" | "failed"; status: "cancelled" },
-) {
+): Promise<Array<{ orgId: string; registrationId: string }>> {
   const where = matchRegistration(event);
   if (!where) {
     logMatchMiss(event);
-    return;
+    return [];
   }
-  await tx
+  const rows = await tx
     .update(registrations)
     .set({ ...set, updatedAt: new Date() })
-    .where(where);
+    .where(where)
+    .returning({ id: registrations.id, orgId: registrations.orgId });
+  return rows.map((row) => ({ orgId: row.orgId, registrationId: row.id }));
 }
 
 async function applyRefund(
   tx: Tx,
   provider: string,
   event: Extract<NormalizedPaymentEvent, { type: "payment.refunded" }>,
-) {
+): Promise<Array<{ orgId: string; registrationId: string }>> {
   const existing = await tx
     .select()
     .from(paymentRefunds)
@@ -210,7 +272,7 @@ async function applyRefund(
     const where = matchRegistration(event);
     if (!where) {
       logMatchMiss(event);
-      return;
+      return [];
     }
     const regRows = await tx
       .select({ id: registrations.id })
@@ -220,7 +282,7 @@ async function applyRefund(
     const reg = regRows[0];
     if (!reg) {
       logMatchMiss(event);
-      return;
+      return [];
     }
 
     await tx.insert(paymentRefunds).values({
@@ -238,12 +300,15 @@ async function applyRefund(
 
   if (status === "succeeded") {
     const where = matchRegistration(event);
-    if (!where) return;
-    await tx
+    if (!where) return [];
+    const rows = await tx
       .update(registrations)
       .set({ paymentStatus: "refunded", updatedAt: new Date() })
-      .where(where);
+      .where(where)
+      .returning({ id: registrations.id, orgId: registrations.orgId });
+    return rows.map((row) => ({ orgId: row.orgId, registrationId: row.id }));
   }
+  return [];
 }
 
 function matchRegistration(event: NormalizedPaymentEvent): SQL | null {

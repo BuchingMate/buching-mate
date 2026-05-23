@@ -12,6 +12,7 @@ import { getEvent, listEvents } from "../events";
 import { rewritePublicAssetUrl } from "../assets/public-url";
 import { createRegistration, toRegistrationDto } from "../registrations";
 import { sendBookingConfirmationEmail, sendBookingResumeEmail } from "../registrations/email";
+import { addZoomRegistrant, cancelZoomRegistrant, getEventVideo, getJoinUrlForRegistration } from "../video";
 import { createResumeToken } from "../payments/resume-token";
 
 export async function getPublicOrg(slug: string) {
@@ -126,6 +127,19 @@ export async function registerForPublicEvent(
       resumeUrl,
     });
   } else if (outcome.registration.status === "confirmed") {
+    let joinUrl: string | null = null;
+    try {
+      joinUrl = await addZoomRegistrant(event.orgId, outcome.registration.id);
+    } catch {
+      // fall through to shared link
+    }
+    if (!joinUrl) {
+      const video = await getEventVideo(event.orgId, event.id);
+      joinUrl = video?.joinUrl ?? null;
+    }
+    const hhmm = event.time.length >= 5 ? event.time.slice(0, 5) : "00:00";
+    const startUtc = new Date(`${event.date}T${hhmm}:00Z`);
+    const endUtc = new Date(startUtc.getTime() + Math.max(1, event.duration) * 60_000);
     void sendBookingConfirmationEmail({
       to: email,
       attendeeName: attendeeRows[0].name,
@@ -135,6 +149,11 @@ export async function registerForPublicEvent(
       eventTime: event.time,
       location: event.location,
       registrationId: outcome.registration.id,
+      joinUrl,
+      startUtc,
+      endUtc,
+      eventId: event.id,
+      description: event.description ?? null,
     });
   }
 
@@ -191,6 +210,29 @@ export async function listMyRegistrations(email: string): Promise<MyRegistration
   }));
 }
 
+export async function getJoinForMyRegistration(
+  email: string,
+  registrationId: string,
+): Promise<{ joinUrl: string } | "not_found" | "forbidden" | "not_ready"> {
+  const normalized = email.trim().toLowerCase();
+  const rows = await db
+    .select({ reg: registrations, attendee: attendees })
+    .from(registrations)
+    .innerJoin(attendees, eq(registrations.attendeeId, attendees.id))
+    .where(eq(registrations.id, registrationId))
+    .limit(1);
+  const found = rows[0];
+  if (!found) return "not_found";
+  if (found.attendee.email !== normalized) return "forbidden";
+  if (found.reg.status !== "confirmed") return "not_ready";
+  if (found.reg.paymentStatus !== "paid" && found.reg.paymentStatus !== "not_required") {
+    return "not_ready";
+  }
+  const joinUrl = await getJoinUrlForRegistration(found.reg.orgId, found.reg.id);
+  if (!joinUrl) return "not_found";
+  return { joinUrl };
+}
+
 export async function cancelOwnRegistration(
   email: string,
   registrationId: string,
@@ -214,5 +256,10 @@ export async function cancelOwnRegistration(
     .returning();
 
   if (!updated[0]) return "not_found";
+  try {
+    await cancelZoomRegistrant(found.reg.orgId, registrationId);
+  } catch {
+    // best-effort
+  }
   return toRegistrationDto(updated[0]);
 }

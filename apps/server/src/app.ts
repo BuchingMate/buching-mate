@@ -12,13 +12,12 @@ import { paymentRoutes } from "./api/payments";
 import { publicRoutes } from "./api/public";
 import { registrationRoutes } from "./api/registrations";
 import { resourceRoutes } from "./api/resources";
+import { videoRoutes } from "./api/video";
 import { webhookRoutes } from "./api/webhooks";
+import { PUBLIC_HOST_SUFFIXES, WEB_URL } from "./env";
 
-const webOrigin = process.env.WEB_URL || "http://localhost:5678";
-const allowlist = (process.env.PUBLIC_HOST_ALLOWLIST || ".lvh.me,.localhost,localhost")
-  .split(",")
-  .map((s) => s.trim())
-  .filter(Boolean);
+const webOrigin = WEB_URL;
+const allowlist = PUBLIC_HOST_SUFFIXES;
 
 function resolveOrigin(origin: string) {
   if (origin === webOrigin) return origin;
@@ -67,6 +66,7 @@ export function createApp() {
   app.route("/api/attendees", attendeeRoutes);
   app.route("/api/registrations", registrationRoutes);
   app.route("/api/payments", paymentRoutes);
+  app.route("/api/video", videoRoutes);
   app.route("/api/webhooks", webhookRoutes);
   app.route("/api/public", publicRoutes);
 

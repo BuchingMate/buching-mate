@@ -3,6 +3,8 @@ import { isPaymentProvider } from "@workspace/contracts";
 import { db } from "../../db";
 import { paymentConnections, paymentRefunds, registrations } from "../../db/schema";
 import { getAdapter } from "../../payments/registry";
+import { getLogger } from "../../observability/request-context";
+import { cancelZoomRegistrant } from "../video";
 
 export type RefundOutcome =
   | { type: "ok"; refundId: string; refundStatus: string }
@@ -85,6 +87,17 @@ export async function refundRegistration(input: {
       rawResponse: result.raw,
       requestedByUserId: input.requestedByUserId,
     });
+
+    if (result.status === "succeeded" || result.status === "pending") {
+      try {
+        await cancelZoomRegistrant(input.orgId, reg.id);
+      } catch (err) {
+        getLogger().warn(
+          { err, orgId: input.orgId, registrationId: reg.id },
+          "refund.zoomCancelRegistrantFailed",
+        );
+      }
+    }
 
     return { type: "ok", refundId: result.refundId, refundStatus: result.status };
   } catch (err) {
