@@ -1,36 +1,18 @@
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { magicLink } from "better-auth/plugins";
-import { Resend } from "resend";
 import { db } from "../db";
 import { attendeeSession, attendeeUser, attendeeVerification } from "../db/auth-schema";
-import { getLogger } from "../observability/request-context";
 import { BETTER_AUTH_URL, TRUSTED_ORIGINS } from "../env";
+import { sendPlatformEmail } from "../services/email/mailer";
 
-let resend: Resend | null = null;
-
-function getResend() {
-  if (!resend && process.env.RESEND_API_KEY) {
-    resend = new Resend(process.env.RESEND_API_KEY);
-  }
-  return resend;
-}
-
+// The attendee sign-in link has no org context, so it is sent from the platform.
 async function sendAttendeeMagicLink({ email, url }: { email: string; url: string }) {
-  if (!process.env.RESEND_API_KEY || !process.env.RESEND_FROM_EMAIL) {
-    getLogger().info({ email, url }, "dev attendee magic link");
-    return;
-  }
-  try {
-    await getResend()?.emails.send({
-      from: process.env.RESEND_FROM_EMAIL,
-      to: email,
-      subject: "Your sign-in link",
-      html: renderMagicLinkHtml(url),
-    });
-  } catch (err) {
-    getLogger().warn({ err, email }, "attendee magic link email failed");
-  }
+  await sendPlatformEmail({
+    to: email,
+    subject: "Your sign-in link",
+    html: renderMagicLinkHtml(url),
+  });
 }
 
 function renderMagicLinkHtml(url: string) {

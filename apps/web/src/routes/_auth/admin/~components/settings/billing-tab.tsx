@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { authClient } from "@/lib/auth-client";
+import { currentOrgQueryOptions } from "@/queries/auth";
 
 const planLabel: Record<string, string> = {
   free: "Free",
@@ -11,6 +12,7 @@ const planLabel: Record<string, string> = {
 };
 
 export function BillingTab(_props: { orgSlug: string }) {
+  const orgQuery = useQuery(currentOrgQueryOptions);
   const stateQuery = useQuery({
     queryKey: ["billing", "customer-state"],
     queryFn: async () => {
@@ -43,7 +45,8 @@ export function BillingTab(_props: { orgSlug: string }) {
   const plan = active ? "team" : "free";
 
   async function startCheckout() {
-    await authClient.checkout({ slug: "team" });
+    const orgId = orgQuery.data?.org.id;
+    await authClient.checkout({ slug: "team", ...(orgId ? { metadata: { orgId } } : {}) });
   }
 
   async function openPortal() {

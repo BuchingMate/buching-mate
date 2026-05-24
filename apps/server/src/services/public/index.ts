@@ -12,7 +12,12 @@ import { getEvent, listEvents } from "../events";
 import { rewritePublicAssetUrl } from "../assets/public-url";
 import { createRegistration, toRegistrationDto } from "../registrations";
 import { sendBookingConfirmationEmail, sendBookingResumeEmail } from "../registrations/email";
-import { addZoomRegistrant, cancelZoomRegistrant, getEventVideo, getJoinUrlForRegistration } from "../video";
+import {
+  addZoomRegistrant,
+  cancelZoomRegistrant,
+  getEventVideo,
+  getJoinUrlForRegistration,
+} from "../video";
 import { createResumeToken } from "../payments/resume-token";
 
 export async function getPublicOrg(slug: string) {
@@ -121,6 +126,7 @@ export async function registerForPublicEvent(
     });
     const resumeUrl = `${publicOrigin}/events/${eventId}/resume?token=${encodeURIComponent(token)}`;
     void sendBookingResumeEmail({
+      orgId: publicOrg.org.id,
       to: email,
       eventTitle: event.title,
       orgName: publicOrg.org.name,
@@ -141,6 +147,7 @@ export async function registerForPublicEvent(
     const startUtc = new Date(`${event.date}T${hhmm}:00Z`);
     const endUtc = new Date(startUtc.getTime() + Math.max(1, event.duration) * 60_000);
     void sendBookingConfirmationEmail({
+      orgId: event.orgId,
       to: email,
       attendeeName: attendeeRows[0].name,
       eventTitle: event.title,

@@ -24,6 +24,7 @@ export type WebhookOutcome =
   | { type: "provider_not_configured" };
 
 type ConfirmationEmail = {
+  orgId: string;
   to: string;
   attendeeName: string;
   eventTitle: string;
@@ -100,10 +101,7 @@ export async function handleWebhook(input: {
     try {
       await cancelZoomRegistrant(orgId, registrationId);
     } catch (err) {
-      getLogger().warn(
-        { err, orgId, registrationId },
-        "webhook.zoomCancelRegistrantFailed",
-      );
+      getLogger().warn({ err, orgId, registrationId }, "webhook.zoomCancelRegistrantFailed");
     }
   }
 
@@ -208,15 +206,13 @@ async function markPaid(
   const hhmm = details.eventTime.length >= 5 ? details.eventTime.slice(0, 5) : "00:00";
   const startUtc = new Date(`${details.eventDate}T${hhmm}:00Z`);
   const endUtc = new Date(startUtc.getTime() + Math.max(1, details.duration) * 60_000);
-  const { orgId: _o, eventId, duration: _d, description, ...emailFields } = details;
+  const { duration: _d, ...emailFields } = details;
   return {
     ...emailFields,
     registrationId: registration.id,
     joinUrl,
     startUtc,
     endUtc,
-    eventId,
-    description,
   };
 }
 

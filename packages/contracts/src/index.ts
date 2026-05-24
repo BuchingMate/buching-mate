@@ -55,6 +55,166 @@ export interface PaymentRefundDto {
 }
 export type WebhookDeliveryStatus = "pending" | "delivered" | "failed" | "dead_letter";
 
+export type EmailDomainStatus = "pending" | "verifying" | "active" | "failed";
+
+// One DNS record an org must publish to verify a custom sending domain. Mirrors
+// the shape Resend returns for a domain's records.
+export interface EmailDnsRecord {
+  record: string;
+  name: string;
+  type: string;
+  value: string;
+  ttl?: string;
+  priority?: number;
+  status?: string;
+}
+
+export interface EmailDomainDto {
+  domain: string;
+  status: EmailDomainStatus;
+  dnsRecords: EmailDnsRecord[];
+  verifiedAt: string | null;
+}
+
+export type BroadcastKind = "newsletter" | "invitation";
+export type BroadcastStatus = "draft" | "sending" | "sent" | "failed";
+
+// Who a broadcast targets. "event_guests" needs an eventId; "all_attendees"
+// reaches everyone the org has registered before.
+export type BroadcastAudience =
+  | { type: "event_guests"; eventId: string }
+  | { type: "all_attendees" };
+
+export interface BroadcastDto {
+  id: string;
+  kind: BroadcastKind;
+  eventId: string | null;
+  subject: string;
+  bodyHtml: string;
+  status: BroadcastStatus;
+  audience: BroadcastAudience;
+  recipientCount: number;
+  sentCount: number;
+  sentAt: string | null;
+  createdAt: string;
+}
+
+export interface CreateBroadcastRequest {
+  kind: BroadcastKind;
+  subject: string;
+  bodyHtml: string;
+  audience: BroadcastAudience;
+}
+
+// Weekly send allowance by plan before any add-on. Only newsletters and
+// all-attendee blasts count toward it; sends to a specific event's guests are
+// always free and never counted.
+export const FREE_WEEKLY_SENDS = 500;
+export const TEAM_INCLUDED_WEEKLY_SENDS = 5000;
+
+// Paid capacity add-ons (Luma-style). Each raises an org's weekly ceiling to its
+// full `weeklyCap` (the tier is the total, not added to the base). `slug` matches
+// the Polar checkout product slug; `monthlyPriceCents` is for display only.
+export interface BroadcastTier {
+  slug: string;
+  weeklyCap: number;
+  monthlyPriceCents: number;
+}
+
+export const BROADCAST_TIERS: readonly BroadcastTier[] = [
+  { slug: "broadcasts-10k", weeklyCap: 10_000, monthlyPriceCents: 5_000 },
+  { slug: "broadcasts-25k", weeklyCap: 25_000, monthlyPriceCents: 20_000 },
+  { slug: "broadcasts-50k", weeklyCap: 50_000, monthlyPriceCents: 40_000 },
+  { slug: "broadcasts-75k", weeklyCap: 75_000, monthlyPriceCents: 60_000 },
+  { slug: "broadcasts-100k", weeklyCap: 100_000, monthlyPriceCents: 80_000 },
+] as const;
+
+// Base weekly send cap for a plan, before any capacity add-on. Enterprise is
+// effectively unlimited.
+export function baseWeeklySends(plan: OrgPlan): number {
+  if (plan === "free") return FREE_WEEKLY_SENDS;
+  if (plan === "team") return TEAM_INCLUDED_WEEKLY_SENDS;
+  return Number.MAX_SAFE_INTEGER;
+}
+
+// An org's reusable email template settings. The same brand wraps every
+// newsletter and invitation the org sends.
+export interface EmailBranding {
+  accentColor: string | null;
+  logoUrl: string | null;
+  footerText: string | null;
+}
+
+export const EMPTY_EMAIL_BRANDING: EmailBranding = {
+  accentColor: null,
+  logoUrl: null,
+  footerText: null,
+};
+
+function escapeBrandingHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+// Accept only a hex colour like #rrggbb; fall back to the calm default ink so a
+// bad value never breaks the layout or injects markup.
+export function brandingAccent(color: string | null | undefined): string {
+  const fallback = "#1f2430";
+  if (!color) return fallback;
+  const value = color.trim();
+  return /^#[0-9a-fA-F]{6}$/.test(value) ? value : fallback;
+}
+
+// Wrap an org's message in its branded email shell. Shared by the server (real
+// send) and the web composer (live preview) so the preview is exact. bodyHtml is
+// the org's own content and is inserted as written.
+export function renderBroadcastEmail(opts: {
+  subject: string;
+  bodyHtml: string;
+  orgName: string;
+  branding: EmailBranding;
+}): string {
+  const accent = brandingAccent(opts.branding.accentColor);
+  const orgName = escapeBrandingHtml(opts.orgName);
+  const footer = (opts.branding.footerText ?? "").trim();
+  const masthead = opts.branding.logoUrl
+    ? `<img src="${escapeBrandingHtml(opts.branding.logoUrl)}" alt="${orgName}" style="max-height:34px;display:block;" />`
+    : `<span style="font-size:16px;font-weight:600;color:#1f2430;letter-spacing:-0.01em;">${orgName}</span>`;
+
+  return `<!DOCTYPE html>
+<html>
+  <body style="margin:0;padding:0;background:#f4f2ee;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:#1f2430;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="padding:28px 16px;">
+      <tr>
+        <td align="center">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:#ffffff;border-radius:14px;overflow:hidden;border:1px solid #e7e2d9;">
+            <tr><td style="height:4px;background:${accent};"></td></tr>
+            <tr><td style="padding:24px 32px 0 32px;">${masthead}</td></tr>
+            <tr>
+              <td style="padding:20px 32px 8px 32px;">
+                <h1 style="margin:0 0 16px 0;font-size:20px;font-weight:600;letter-spacing:-0.01em;color:#1f2430;">${escapeBrandingHtml(opts.subject)}</h1>
+                <div style="font-size:15px;line-height:1.6;color:#3b4150;">${opts.bodyHtml}</div>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:24px 32px 28px 32px;">
+                <div style="border-top:1px solid #ece8e0;padding-top:16px;font-size:12px;line-height:1.5;color:#8a8578;">
+                  ${footer ? escapeBrandingHtml(footer) : `Sent by ${orgName}`}
+                </div>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>`;
+}
+
 export interface ApiErrorResponse {
   error: {
     code: string;
@@ -87,6 +247,10 @@ export interface OrgSettingsDto {
   categoryConfigs: CategoryConfigs;
   webhookUrl: string | null;
   webhookSecret: string | null;
+  emailBranding: EmailBranding;
+  // Effective weekly broadcast send cap: the plan base, or the active add-on
+  // tier when one is subscribed.
+  broadcastWeeklyCap: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -346,6 +510,7 @@ export interface UpdateOrgSettingsRequest {
   categoryConfigs?: CategoryConfigs;
   webhookUrl?: string | null;
   emailTemplates?: Record<string, unknown>;
+  emailBranding?: EmailBranding;
 }
 
 export interface CreatePublicAssetUploadRequest {

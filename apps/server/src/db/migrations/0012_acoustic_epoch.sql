@@ -1,0 +1,1 @@
+ALTER TABLE "org_settings" ADD COLUMN "broadcast_weekly_cap" integer;

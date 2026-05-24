@@ -2,7 +2,12 @@ import { eq } from "drizzle-orm";
 import { db } from "../../db";
 import { orgSettings, polarSubscriptions } from "../../db/schema";
 import { logger } from "../../observability/logger";
-import { planFromProductId, type OrgPlan } from "./polar";
+import {
+  broadcastCapForProduct,
+  isBroadcastTierProduct,
+  planFromProductId,
+  type OrgPlan,
+} from "./polar";
 
 type PolarSubscriptionPayload = {
   id: string;
@@ -24,6 +29,15 @@ function orgIdFromMetadata(meta: Record<string, unknown> | undefined | null): st
   return typeof v === "string" && v.length > 0 ? v : null;
 }
 
+// A subscription can declare its platform plan via metadata. This is how custom
+// Enterprise deals work: their product/price is bespoke per customer (or ad-hoc on
+// the checkout), so there is no stable product id to match. Set `plan` on the
+// checkout and it carries onto the subscription.
+export function planFromMetadata(meta: Record<string, unknown> | undefined | null): OrgPlan | null {
+  const v = meta?.plan;
+  return v === "team" || v === "enterprise" ? v : null;
+}
+
 function mapStatus(s: string): "trialing" | "active" | "past_due" | "canceled" | "incomplete" {
   switch (s) {
     case "trialing":
@@ -41,19 +55,37 @@ function mapStatus(s: string): "trialing" | "active" | "past_due" | "canceled" |
   }
 }
 
-function statusToPlan(
-  dbStatus: "trialing" | "active" | "past_due" | "canceled" | "incomplete",
-  productId: string,
-): OrgPlan {
-  if (dbStatus === "active" || dbStatus === "trialing" || dbStatus === "past_due") {
-    return planFromProductId(productId);
-  }
-  return "free";
+// A broadcast capacity add-on is a separate subscription from the Team plan. It
+// only sets the org's weekly send cap; it must not touch the Team subscription row
+// or the org's plan. Cap applies while active, clears when the add-on ends.
+async function applyBroadcastAddon(orgId: string, sub: PolarSubscriptionPayload) {
+  const status = mapStatus(sub.status);
+  const live = status === "active" || status === "trialing" || status === "past_due";
+  const cap = live ? broadcastCapForProduct(sub.productId) : null;
+  await db
+    .update(orgSettings)
+    .set({ broadcastWeeklyCap: cap, updatedAt: new Date() })
+    .where(eq(orgSettings.orgId, orgId));
 }
 
 async function upsertSubscription(orgId: string, sub: PolarSubscriptionPayload) {
+  // Email-plan product line: a broadcast capacity add-on only sets the weekly cap.
+  if (isBroadcastTierProduct(sub.productId)) {
+    await applyBroadcastAddon(orgId, sub);
+    return;
+  }
+  // Platform-plan product line: resolve the plan from metadata first (custom
+  // Enterprise), then the known Team product id. An unrecognized product must never
+  // be assumed to be a plan, or it would clobber the org's plan and the single
+  // subscription row.
+  const planForProduct = planFromMetadata(sub.metadata) ?? planFromProductId(sub.productId);
+  if (!planForProduct) {
+    logger.warn({ subId: sub.id, productId: sub.productId }, "polar.webhook.unknownProduct");
+    return;
+  }
   const status = mapStatus(sub.status);
-  const plan = statusToPlan(status, sub.productId);
+  const live = status === "active" || status === "trialing" || status === "past_due";
+  const plan: OrgPlan = live ? planForProduct : "free";
   const seats = sub.seats ?? 1;
   const now = new Date();
 

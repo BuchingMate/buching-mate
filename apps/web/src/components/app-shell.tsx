@@ -12,6 +12,7 @@ import {
   LayoutDashboard,
   ListChecks,
   LogOut,
+  Megaphone,
   Menu,
   PanelLeft,
   Settings,
@@ -34,6 +35,7 @@ const workspaceNavItems = [
   { label: "Calendar", to: "/admin/calendar", icon: CalendarDays },
   { label: "Resources", to: "/admin/resources", icon: ListChecks },
   { label: "Attendees", to: "/admin/attendees", icon: Users },
+  { label: "Broadcasts", to: "/admin/broadcasts", icon: Megaphone },
 ] as const;
 
 function navItemClasses(collapsed: boolean, itemHeight: string, active: boolean) {

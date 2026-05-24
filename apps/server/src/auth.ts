@@ -16,7 +16,7 @@ import {
   handleSubscriptionRevoked,
   handleSubscriptionUpdated,
 } from "./ee/billing/webhook";
-import { syncSeatCount } from "./ee/billing/polar";
+import { broadcastTierCheckoutProducts, syncSeatCount } from "./ee/billing/polar";
 import { BETTER_AUTH_URL, TRUSTED_ORIGINS, WEB_URL } from "./env";
 
 const polarClient = process.env.POLAR_ACCESS_TOKEN
@@ -97,6 +97,7 @@ const organizationPlugin = organization({
   sendInvitationEmail: async (data) => {
     const inviteLink = `${WEB_URL}/invite/${data.id}`;
     await sendInviteEmail({
+      orgId: data.organization.id,
       email: data.email,
       organizationName: data.organization.name,
       inviteLink,
@@ -111,7 +112,10 @@ const polarPlugin = polarClient
       client: polarClient,
       use: [
         checkout({
-          products: teamProductId ? [{ productId: teamProductId, slug: "team" }] : [],
+          products: [
+            ...(teamProductId ? [{ productId: teamProductId, slug: "team" }] : []),
+            ...broadcastTierCheckoutProducts(),
+          ],
           successUrl: `${WEB_URL}/admin?tab=billing&success=1`,
           authenticatedUsersOnly: true,
         }),
