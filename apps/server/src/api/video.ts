@@ -5,10 +5,7 @@ import { requireAuth, requireOrg, requireRole } from "../middleware/auth";
 import { logEvent } from "../observability/events";
 import { WEB_URL } from "../env";
 import { enrichLogger, getLogger } from "../observability/request-context";
-import {
-  VideoInvalidSignatureError,
-  type VideoProvider,
-} from "../video/adapter";
+import { VideoInvalidSignatureError, type VideoProvider } from "../video/adapter";
 import {
   getVideoAdapter,
   isVideoProviderAvailable,
@@ -102,10 +99,7 @@ videoRoutes.post("/webhooks/:provider", async (c) => {
       meetingUuid: event.meetingUuid,
     });
     void fetchAttendanceForMeetingUuid(event.meetingUuid).catch((err: unknown) => {
-      getLogger().warn(
-        { err, meetingUuid: event.meetingUuid },
-        "video.attendance.fetchFailed",
-      );
+      getLogger().warn({ err, meetingUuid: event.meetingUuid }, "video.attendance.fetchFailed");
     });
     return c.json({ received: true });
   }

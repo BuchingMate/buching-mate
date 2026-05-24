@@ -122,7 +122,10 @@ function publicOrigin(c: { req: { url: string; header: (n: string) => string | u
   return new URL(c.req.url).origin;
 }
 
-function buildCallbackUrl(c: { req: { url: string; header: (n: string) => string | undefined } }, provider: string) {
+function buildCallbackUrl(
+  c: { req: { url: string; header: (n: string) => string | undefined } },
+  provider: string,
+) {
   return `${publicOrigin(c)}/api/payments/callback/${provider}`;
 }
 

@@ -6,12 +6,7 @@ import {
   seedRegistration,
   seedResource,
 } from "../../../test/helpers/data";
-import {
-  duplicateEvent,
-  getEvent,
-  listEvents,
-  replaceEventResources,
-} from "./index";
+import { duplicateEvent, getEvent, listEvents, replaceEventResources } from "./index";
 
 describe("listEvents / getEvent counts", () => {
   test("should count pending registrations as confirmed and count waitlisted separately", async () => {
@@ -112,11 +107,7 @@ describe("duplicateEvent", () => {
 describe("replaceEventResources", () => {
   test("should return event_not_found when the target event does not exist", async () => {
     const { orgId } = await signUpAndCreateOrg();
-    const result = await replaceEventResources(
-      orgId,
-      "00000000-0000-0000-0000-000000000000",
-      [],
-    );
+    const result = await replaceEventResources(orgId, "00000000-0000-0000-0000-000000000000", []);
     expect(result).toBe("event_not_found");
   });
 
@@ -136,9 +127,7 @@ describe("replaceEventResources", () => {
     const { orgId } = await signUpAndCreateOrg();
     const event = await seedEvent(orgId);
     const resource = await seedResource(orgId);
-    await replaceEventResources(orgId, event.id, [
-      { resourceId: resource.id, role: "instructor" },
-    ]);
+    await replaceEventResources(orgId, event.id, [{ resourceId: resource.id, role: "instructor" }]);
 
     const result = await replaceEventResources(orgId, event.id, []);
     expect(result).toEqual([]);
@@ -150,9 +139,7 @@ describe("replaceEventResources", () => {
     const r1 = await seedResource(orgId, { name: "R1" });
     const r2 = await seedResource(orgId, { name: "R2" });
 
-    await replaceEventResources(orgId, event.id, [
-      { resourceId: r1.id, role: "instructor" },
-    ]);
+    await replaceEventResources(orgId, event.id, [{ resourceId: r1.id, role: "instructor" }]);
     const replaced = await replaceEventResources(orgId, event.id, [
       { resourceId: r2.id, role: "location", quantity: 3 },
     ]);

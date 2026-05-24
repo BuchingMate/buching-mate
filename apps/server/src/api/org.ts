@@ -13,6 +13,21 @@ import {
   updateMemberRole,
   updateOrgSettings,
 } from "../services/org";
+import {
+  createEmailDomain,
+  getEmailDomain,
+  removeEmailDomain,
+  verifyEmailDomain,
+} from "../services/email/domains";
+
+// A custom sending domain must be a plain hostname like "mail.acme.com".
+const DOMAIN_PATTERN = /^(?=.{1,253}$)([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}$/i;
+
+function parseDomain(input: unknown): string | null {
+  if (!isRecord(input) || typeof input.domain !== "string") return null;
+  const domain = input.domain.trim().toLowerCase();
+  return DOMAIN_PATTERN.test(domain) ? domain : null;
+}
 
 const orgRoles = ["owner", "admin", "manager", "viewer"] as const;
 
@@ -81,6 +96,20 @@ function parseUpdateOrgSettings(input: unknown): UpdateOrgSettingsRequest | stri
     parsed.emailTemplates = input.emailTemplates;
   }
 
+  if (input.emailBranding !== undefined) {
+    if (!isRecord(input.emailBranding)) return "Email branding must be an object";
+    const accentColor = stringOrNull(input.emailBranding.accentColor);
+    const logoUrl = stringOrNull(input.emailBranding.logoUrl);
+    const footerText = stringOrNull(input.emailBranding.footerText);
+    if (accentColor === undefined) return "Accent color must be a string or null";
+    if (accentColor && !/^#[0-9a-fA-F]{6}$/.test(accentColor)) {
+      return "Accent color must be a hex value like #e2552b";
+    }
+    if (logoUrl === undefined) return "Logo URL must be a string or null";
+    if (footerText === undefined) return "Footer text must be a string or null";
+    parsed.emailBranding = { accentColor, logoUrl, footerText };
+  }
+
   if (Object.keys(parsed).length === 0) return "At least one field is required";
   return parsed;
 }
@@ -125,5 +154,26 @@ export const orgRoutes = new Hono<ApiEnv>()
   .delete("/invites/:inviteId", requireRole("admin"), async (c) => {
     const deleted = await deleteInvite(c.var.orgId, c.req.param("inviteId"));
     if (!deleted) return apiError(c, 404, "invite_not_found", "Invite not found");
+    return c.json({ deleted: true });
+  })
+  .get("/email-domain", requireRole("admin"), async (c) =>
+    c.json({ domain: await getEmailDomain(c.var.orgId) }),
+  )
+  .post("/email-domain", requireRole("admin"), async (c) => {
+    if (c.var.org.plan === "free") {
+      return apiError(c, 402, "team_plan_required", "Custom sending domain requires the Team plan");
+    }
+    const domain = parseDomain(await readJson(c));
+    if (!domain)
+      return apiError(c, 400, "invalid_domain", "Enter a valid domain like mail.acme.com");
+    return c.json({ domain: await createEmailDomain(c.var.orgId, domain) });
+  })
+  .post("/email-domain/verify", requireRole("admin"), async (c) => {
+    const domain = await verifyEmailDomain(c.var.orgId);
+    if (!domain) return apiError(c, 404, "domain_not_found", "No custom sending domain set");
+    return c.json({ domain });
+  })
+  .delete("/email-domain", requireRole("admin"), async (c) => {
+    await removeEmailDomain(c.var.orgId);
     return c.json({ deleted: true });
   });

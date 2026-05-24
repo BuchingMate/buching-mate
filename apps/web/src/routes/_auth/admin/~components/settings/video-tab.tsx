@@ -6,11 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { disconnectZoom, startZoomConnect } from "@/lib/video";
-import {
-  videoKeys,
-  videoProvidersQueryOptions,
-  zoomConnectionQueryOptions,
-} from "@/queries/video";
+import { videoKeys, videoProvidersQueryOptions, zoomConnectionQueryOptions } from "@/queries/video";
 
 export function VideoTab() {
   const providersQuery = useQuery(videoProvidersQueryOptions);

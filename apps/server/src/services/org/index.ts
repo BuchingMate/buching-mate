@@ -1,9 +1,11 @@
 import type {
+  EmailBranding,
   MemberDto,
   OrgRole,
   OrgSettingsDto,
   UpdateOrgSettingsRequest,
 } from "@workspace/contracts";
+import { baseWeeklySends } from "@workspace/contracts";
 import { and, eq } from "drizzle-orm";
 import type { AuthOrg } from "../../api/types";
 import { db } from "../../db";
@@ -19,6 +21,17 @@ export function getCurrentOrgContext(org: AuthOrg, memberRole: OrgRole): Current
   return { org: { ...org, logo: rewritePublicAssetUrl(org.logo) }, memberRole };
 }
 
+// The email branding lives in the emailTemplates jsonb column. Read it back into
+// a typed shape, ignoring anything that is not a string.
+function brandingFromTemplates(value: Record<string, unknown> | null): EmailBranding {
+  const v = (value ?? {}) as Partial<Record<keyof EmailBranding, unknown>>;
+  return {
+    accentColor: typeof v.accentColor === "string" ? v.accentColor : null,
+    logoUrl: typeof v.logoUrl === "string" ? v.logoUrl : null,
+    footerText: typeof v.footerText === "string" ? v.footerText : null,
+  };
+}
+
 function toOrgSettingsDto(settings: typeof orgSettings.$inferSelect): OrgSettingsDto {
   return {
     id: settings.id,
@@ -30,6 +43,8 @@ function toOrgSettingsDto(settings: typeof orgSettings.$inferSelect): OrgSetting
     categoryConfigs: settings.categoryConfigs,
     webhookUrl: settings.webhookUrl,
     webhookSecret: settings.webhookSecret,
+    emailBranding: brandingFromTemplates(settings.emailTemplates),
+    broadcastWeeklyCap: settings.broadcastWeeklyCap ?? baseWeeklySends(settings.plan),
     createdAt: settings.createdAt.toISOString(),
     updatedAt: settings.updatedAt.toISOString(),
   };
@@ -50,9 +65,15 @@ export async function updateOrgSettings(
 ): Promise<OrgSettingsDto> {
   await getOrgSettings(orgId);
 
+  // emailBranding is stored in the emailTemplates column, so map it there rather
+  // than letting it hit a column that does not exist.
+  const { emailBranding, ...rest } = input;
+  const patch: Record<string, unknown> = { ...rest, updatedAt: new Date() };
+  if (emailBranding) patch.emailTemplates = emailBranding;
+
   const rows = await db
     .update(orgSettings)
-    .set({ ...input, updatedAt: new Date() })
+    .set(patch)
     .where(eq(orgSettings.orgId, orgId))
     .returning();
 

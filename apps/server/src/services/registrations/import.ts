@@ -121,10 +121,7 @@ export async function bulkImportRegistrations(
       try {
         await addZoomRegistrant(orgId, registrationId);
       } catch (err) {
-        getLogger().warn(
-          { err, registrationId },
-          "import.zoomRegistrantFailed",
-        );
+        getLogger().warn({ err, registrationId }, "import.zoomRegistrantFailed");
       }
 
       outcome.created += 1;

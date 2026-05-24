@@ -2,12 +2,23 @@ import { and, eq, sql } from "drizzle-orm";
 import { db } from "../db";
 import { subscriptionUsage } from "../db/schema";
 
-export type UsageMetric = "events_created";
+export type UsageMetric = "events_created" | "broadcast_sends";
 
 export function monthStart(when: Date = new Date()): Date {
   const d = new Date(when);
   d.setUTCDate(1);
   d.setUTCHours(0, 0, 0, 0);
+  return d;
+}
+
+// Start of the UTC week (Monday 00:00) for the given date. Broadcast quota is
+// counted per week, matching how the plans frame send limits.
+export function weekStart(when: Date = new Date()): Date {
+  const d = new Date(when);
+  d.setUTCHours(0, 0, 0, 0);
+  const day = d.getUTCDay(); // 0 = Sunday
+  const mondayOffset = (day + 6) % 7;
+  d.setUTCDate(d.getUTCDate() - mondayOffset);
   return d;
 }
 

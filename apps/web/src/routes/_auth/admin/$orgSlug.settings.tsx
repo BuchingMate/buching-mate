@@ -20,6 +20,7 @@ import { WebhooksTab } from "./~components/settings/webhooks-tab";
 import { MembersTab } from "./~components/settings/members-tab";
 import { PaymentsTab } from "./~components/settings/payments-tab";
 import { VideoTab } from "./~components/settings/video-tab";
+import { EmailDomainTab } from "./~components/settings/email-domain-tab";
 import { BillingTab } from "./~components/settings/billing-tab";
 import { DangerTab } from "./~components/settings/danger-tab";
 
@@ -32,6 +33,7 @@ const VALID_TABS = [
   "webhooks",
   "payments",
   "video",
+  "email-domain",
   "billing",
   "members",
   "danger",
@@ -97,6 +99,7 @@ function SettingsTabs({
   const showDanger = canDeleteOrg(role);
   const showPayments = canManagePayments(role);
   const showConnectedApps = canManageConnectedApps(role);
+  const showSettings = canManageSettings(role);
   const showWebhooks = canManageWebhooks(role);
   const showBilling = BILLING_ENABLED && canManageBilling(role);
 
@@ -114,6 +117,7 @@ function SettingsTabs({
           {showWebhooks && <TabsTrigger value="webhooks">Webhooks</TabsTrigger>}
           {showPayments && <TabsTrigger value="payments">Payments</TabsTrigger>}
           {showConnectedApps && <TabsTrigger value="video">Connected apps</TabsTrigger>}
+          {showSettings && <TabsTrigger value="email-domain">Email</TabsTrigger>}
           {showBilling && <TabsTrigger value="billing">Billing</TabsTrigger>}
           <TabsTrigger value="members">Members</TabsTrigger>
           {showDanger && <TabsTrigger value="danger">Danger</TabsTrigger>}
@@ -138,6 +142,11 @@ function SettingsTabs({
         {showConnectedApps && (
           <TabsContent value="video" className="mt-6">
             <VideoTab />
+          </TabsContent>
+        )}
+        {showSettings && (
+          <TabsContent value="email-domain" className="mt-6">
+            <EmailDomainTab />
           </TabsContent>
         )}
         {showBilling && (

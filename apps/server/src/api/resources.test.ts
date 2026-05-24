@@ -48,7 +48,9 @@ describe("POST /api/resources", () => {
       orgId: fx.orgId,
     });
     expect(res.status).toBe(201);
-    const body = await asJson<{ resource: { id: string; orgId: string; name: string; metadata: Record<string, unknown> } }>(res);
+    const body = await asJson<{
+      resource: { id: string; orgId: string; name: string; metadata: Record<string, unknown> };
+    }>(res);
     expect(body.resource.id).toBeTruthy();
     expect(body.resource.orgId).toBe(fx.orgId);
     expect(body.resource.name).toBe("Jane Doe");

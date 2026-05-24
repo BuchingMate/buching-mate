@@ -1,12 +1,6 @@
 import { eq } from "drizzle-orm";
 import { db } from "../../src/db";
-import {
-  attendees,
-  events,
-  orgSettings,
-  registrations,
-  resources,
-} from "../../src/db/schema";
+import { attendees, events, orgSettings, registrations, resources } from "../../src/db/schema";
 import type {
   EventStatus,
   EventVisibility,
@@ -114,7 +108,6 @@ export async function seedRegistration(
     .returning();
   return rows[0];
 }
-
 
 export async function setOrgPlan(orgId: string, plan: OrgPlan) {
   const existing = await db

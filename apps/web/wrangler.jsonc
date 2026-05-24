@@ -5,17 +5,17 @@
   "compatibility_flags": ["nodejs_compat"],
   "main": "@tanstack/react-start/server-entry",
   "observability": {
-    "enabled": true
+    "enabled": true,
   },
   "vars": {
-    "VITE_SERVER_URL": "https://api.buchingmate.com"
+    "VITE_SERVER_URL": "https://api.buchingmate.com",
   },
   "env": {
     "staging": {
       "name": "booking-mate-web-staging",
       "vars": {
-        "VITE_SERVER_URL": "https://api.staging.buchingmate.com"
-      }
-    }
-  }
+        "VITE_SERVER_URL": "https://api.staging.buchingmate.com",
+      },
+    },
+  },
 }

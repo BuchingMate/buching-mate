@@ -1,4 +1,3 @@
-import { Resend } from "resend";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { db } from "../../db";
 import {
@@ -11,14 +10,7 @@ import {
 import { getLogger } from "../../observability/request-context";
 import { buildEventIcs } from "../../lib/ics";
 import { getJoinUrlForRegistration } from "../video";
-
-let resend: Resend | null = null;
-function getResend() {
-  if (!resend && process.env.RESEND_API_KEY) {
-    resend = new Resend(process.env.RESEND_API_KEY);
-  }
-  return resend;
-}
+import { sendTenantEmail } from "../email/mailer";
 
 const KIND_WINDOWS: Record<"t24h" | "t1h", { lookAheadMs: number; windowMs: number }> = {
   t24h: { lookAheadMs: 24 * 3600 * 1000, windowMs: 60 * 60 * 1000 },
@@ -110,6 +102,7 @@ ${locationRow}
 }
 
 async function sendReminder(input: {
+  orgId: string;
   to: string;
   attendeeName: string;
   eventTitle: string;
@@ -126,13 +119,6 @@ async function sendReminder(input: {
   registrationId: string;
 }) {
   const whenLabel = input.kind === "t24h" ? "is tomorrow" : "starts in 1 hour";
-  if (!process.env.RESEND_API_KEY || !process.env.RESEND_FROM_EMAIL) {
-    getLogger().info(
-      { to: input.to, eventTitle: input.eventTitle, kind: input.kind },
-      "dev reminder email",
-    );
-    return;
-  }
   const ics = buildEventIcs({
     uid: `${input.eventId}@buchingmate`,
     title: input.eventTitle,
@@ -144,26 +130,22 @@ async function sendReminder(input: {
     organizerEmail: null,
     organizerName: input.orgName,
   });
-  try {
-    await getResend()?.emails.send({
-      from: process.env.RESEND_FROM_EMAIL,
-      to: input.to,
-      subject:
-        input.kind === "t24h"
-          ? `Reminder: ${input.eventTitle} is tomorrow`
-          : `Starting soon: ${input.eventTitle} in 1 hour`,
-      html: renderReminderHtml({ ...input, whenLabel }),
-      attachments: [
-        {
-          filename: "event.ics",
-          contentType: "text/calendar",
-          content: Buffer.from(ics, "utf8").toString("base64"),
-        },
-      ],
-    });
-  } catch (err) {
-    getLogger().warn({ err, to: input.to, kind: input.kind }, "reminder email send failed");
-  }
+  await sendTenantEmail({
+    orgId: input.orgId,
+    to: input.to,
+    subject:
+      input.kind === "t24h"
+        ? `Reminder: ${input.eventTitle} is tomorrow`
+        : `Starting soon: ${input.eventTitle} in 1 hour`,
+    html: renderReminderHtml({ ...input, whenLabel }),
+    attachments: [
+      {
+        filename: "event.ics",
+        contentType: "text/calendar",
+        content: Buffer.from(ics, "utf8").toString("base64"),
+      },
+    ],
+  });
 }
 
 export async function dispatchDueReminders(): Promise<{ sent: number }> {
@@ -182,6 +164,7 @@ export async function dispatchDueReminders(): Promise<{ sent: number }> {
       const start = eventStartUtc(row.event.date, row.event.time);
       const end = new Date(start.getTime() + Math.max(1, row.event.duration) * 60_000);
       await sendReminder({
+        orgId: row.reg.orgId,
         to: row.attendee.email,
         attendeeName: row.attendee.name,
         eventTitle: row.event.title,

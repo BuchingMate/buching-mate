@@ -44,10 +44,7 @@ export const publicRoutes = new Hono()
     return c.json({ registration: result });
   })
   .get("/me/registrations/:id/join", requireAttendee, async (c) => {
-    const result = await getJoinForMyRegistration(
-      c.var.attendeeUser.email,
-      c.req.param("id"),
-    );
+    const result = await getJoinForMyRegistration(c.var.attendeeUser.email, c.req.param("id"));
     if (result === "not_found") return apiError(c, 404, "not_found", "No video meeting found");
     if (result === "forbidden") return apiError(c, 403, "forbidden", "Not your registration");
     if (result === "not_ready")

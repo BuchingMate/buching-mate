@@ -9,11 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Separator } from "@/components/ui/separator";
 import { getPublicRequestInfo } from "@/lib/public";
-import {
-  attendeeSessionQueryOptions,
-  authKeys,
-  sessionQueryOptions,
-} from "@/queries/auth";
+import { attendeeSessionQueryOptions, authKeys, sessionQueryOptions } from "@/queries/auth";
 import { pageHead } from "@/lib/seo";
 import { emailDomainHint, isEmailDomainAllowed } from "@/lib/email-domain";
 
@@ -86,7 +82,10 @@ function StaffLogin() {
   };
 
   const handleGoogleSignIn = async () => {
-    await authClient.signIn.social({ provider: "google", callbackURL: `${window.location.origin}/admin` });
+    await authClient.signIn.social({
+      provider: "google",
+      callbackURL: `${window.location.origin}/admin`,
+    });
   };
 
   return (

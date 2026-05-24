@@ -1,10 +1,47 @@
 import { Polar } from "@polar-sh/sdk";
 import { count, eq } from "drizzle-orm";
+import { BROADCAST_TIERS } from "@workspace/contracts";
 import { db } from "../../db";
 import { member, orgSettings, polarSubscriptions } from "../../db/schema";
 import { logger } from "../../observability/logger";
 
 export type OrgPlan = "free" | "team" | "enterprise";
+
+// Maps a Polar product id to its broadcast capacity tier slug. Set from the
+// POLAR_BROADCAST_TIERS env var, a JSON object of { "<productId>": "<slug>" }
+// produced by scripts/polar-tiers-setup.ts.
+function loadTierProductSlugs(): Record<string, string> {
+  const raw = process.env.POLAR_BROADCAST_TIERS;
+  if (!raw) return {};
+  try {
+    const parsed = JSON.parse(raw) as Record<string, string>;
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch (err) {
+    logger.error({ err }, "polar.broadcastTiers.parseFailed");
+    return {};
+  }
+}
+
+const TIER_PRODUCT_SLUGS = loadTierProductSlugs();
+
+// True when a product id belongs to a broadcast capacity add-on, not the Team plan.
+export function isBroadcastTierProduct(productId: string): boolean {
+  return productId in TIER_PRODUCT_SLUGS;
+}
+
+// Weekly send cap a broadcast add-on product grants, or null if the id is not a
+// known tier product.
+export function broadcastCapForProduct(productId: string): number | null {
+  const slug = TIER_PRODUCT_SLUGS[productId];
+  if (!slug) return null;
+  return BROADCAST_TIERS.find((t) => t.slug === slug)?.weeklyCap ?? null;
+}
+
+// The tier products to register as Polar checkout options, pairing each product
+// id with its slug. Empty when POLAR_BROADCAST_TIERS is unset.
+export function broadcastTierCheckoutProducts(): { productId: string; slug: string }[] {
+  return Object.entries(TIER_PRODUCT_SLUGS).map(([productId, slug]) => ({ productId, slug }));
+}
 
 let cached: Polar | null = null;
 
@@ -21,17 +58,19 @@ export function getPolarClient(): Polar | null {
 
 export const TEAM_PRODUCT_ID = process.env.POLAR_PRODUCT_TEAM ?? "";
 
-export function planFromProductId(productId: string | null | undefined): OrgPlan {
-  if (!productId) return "free";
+// Resolve the platform plan a product grants, or null when the product is not a
+// recognized platform-plan product. Only the Team product is self-serve; Enterprise
+// is always a custom per-customer deal and is set out-of-band, not inferred here.
+// Email-plan products (broadcast tiers) are a separate product line, handled by the
+// tier helpers above, never here.
+export function planFromProductId(productId: string | null | undefined): OrgPlan | null {
+  if (!productId) return null;
   if (productId === TEAM_PRODUCT_ID) return "team";
-  return "team";
+  return null;
 }
 
 export async function countOrgSeats(orgId: string): Promise<number> {
-  const rows = await db
-    .select({ n: count() })
-    .from(member)
-    .where(eq(member.organizationId, orgId));
+  const rows = await db.select({ n: count() }).from(member).where(eq(member.organizationId, orgId));
   return Math.max(1, rows[0]?.n ?? 1);
 }
 

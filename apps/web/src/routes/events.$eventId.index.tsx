@@ -217,7 +217,10 @@ function PublicEventDetailContent({ slug, eventId }: { slug: string; eventId: st
                 Event info
               </h3>
               <dl className="space-y-3 rounded-lg bg-card p-5 text-sm ring-1 ring-border">
-                <InfoRow label="When" value={`${dayLabel}, ${tile.month} ${tile.day} ${tile.year}`} />
+                <InfoRow
+                  label="When"
+                  value={`${dayLabel}, ${tile.month} ${tile.day} ${tile.year}`}
+                />
                 <InfoRow label="Time" value={`${timeLabel} · ${event.duration} min`} />
                 {event.location ? <InfoRow label="Where" value={event.location} /> : null}
                 <InfoRow label="Price" value={priceLabel} />

@@ -241,13 +241,31 @@ function combineEventStartUtc(event: typeof events.$inferSelect): Date {
 }
 
 const DAY_NAME_TO_ZOOM: Record<string, number> = {
-  sun: 1, sunday: 1, "0": 1, "7": 1,
-  mon: 2, monday: 2, "1": 2,
-  tue: 3, tuesday: 3, tues: 3, "2": 3,
-  wed: 4, wednesday: 4, "3": 4,
-  thu: 5, thursday: 5, thur: 5, thurs: 5, "4": 5,
-  fri: 6, friday: 6, "5": 6,
-  sat: 7, saturday: 7, "6": 7,
+  sun: 1,
+  sunday: 1,
+  "0": 1,
+  "7": 1,
+  mon: 2,
+  monday: 2,
+  "1": 2,
+  tue: 3,
+  tuesday: 3,
+  tues: 3,
+  "2": 3,
+  wed: 4,
+  wednesday: 4,
+  "3": 4,
+  thu: 5,
+  thursday: 5,
+  thur: 5,
+  thurs: 5,
+  "4": 5,
+  fri: 6,
+  friday: 6,
+  "5": 6,
+  sat: 7,
+  saturday: 7,
+  "6": 7,
 };
 
 function parseRecurrenceDays(days: string[]): number[] {
@@ -264,9 +282,8 @@ export function recurrenceForEvent(event: typeof events.$inferSelect) {
   if (!event.recurring || !event.recurrenceFrequency) return null;
   const freq = event.recurrenceFrequency.toLowerCase();
   if (freq !== "daily" && freq !== "weekly" && freq !== "monthly") return null;
-  const interval = event.recurrenceInterval && event.recurrenceInterval > 0
-    ? event.recurrenceInterval
-    : 1;
+  const interval =
+    event.recurrenceInterval && event.recurrenceInterval > 0 ? event.recurrenceInterval : 1;
   const recurrence: NonNullable<CreateMeetingInput["recurrence"]> = {
     frequency: freq,
     interval,
@@ -381,16 +398,10 @@ export async function syncZoomMeetingForEvent(
   const accessToken = await loadAccessToken(link.connectionId);
   const adapter = getVideoAdapter(link.provider);
   await adapter.updateMeeting(accessToken, link.externalMeetingId, patch);
-  await db
-    .update(eventVideo)
-    .set({ updatedAt: new Date() })
-    .where(eq(eventVideo.id, link.id));
+  await db.update(eventVideo).set({ updatedAt: new Date() }).where(eq(eventVideo.id, link.id));
 }
 
-export async function detachZoomMeetingFromEvent(
-  orgId: string,
-  eventId: string,
-): Promise<void> {
+export async function detachZoomMeetingFromEvent(orgId: string, eventId: string): Promise<void> {
   const rows = await db
     .select()
     .from(eventVideo)
@@ -419,10 +430,7 @@ export async function getHostStartUrl(orgId: string, eventId: string): Promise<s
   return decrypt(link.hostStartUrlEncrypted);
 }
 
-export async function getEventVideo(
-  orgId: string,
-  eventId: string,
-): Promise<EventVideoDto | null> {
+export async function getEventVideo(orgId: string, eventId: string): Promise<EventVideoDto | null> {
   const rows = await db
     .select()
     .from(eventVideo)
@@ -518,10 +526,7 @@ export async function addZoomRegistrant(
   return created.joinUrl;
 }
 
-export async function cancelZoomRegistrant(
-  orgId: string,
-  registrationId: string,
-): Promise<void> {
+export async function cancelZoomRegistrant(orgId: string, registrationId: string): Promise<void> {
   const rows = await db
     .select({
       reg: eventRegistrants,
@@ -530,10 +535,7 @@ export async function cancelZoomRegistrant(
     .from(eventRegistrants)
     .innerJoin(eventVideo, eq(eventVideo.eventId, eventRegistrants.eventId))
     .where(
-      and(
-        eq(eventRegistrants.orgId, orgId),
-        eq(eventRegistrants.registrationId, registrationId),
-      ),
+      and(eq(eventRegistrants.orgId, orgId), eq(eventRegistrants.registrationId, registrationId)),
     )
     .limit(1);
   const row = rows[0];
@@ -573,7 +575,10 @@ export async function getJoinUrlForRegistration(
   if (!regRows[0]) return null;
 
   const personal = await db
-    .select({ joinUrlEncrypted: eventRegistrants.joinUrlEncrypted, status: eventRegistrants.status })
+    .select({
+      joinUrlEncrypted: eventRegistrants.joinUrlEncrypted,
+      status: eventRegistrants.status,
+    })
     .from(eventRegistrants)
     .where(eq(eventRegistrants.registrationId, registrationId))
     .limit(1);
@@ -600,10 +605,7 @@ export type AttendanceRow = {
   networkType: string | null;
 };
 
-export async function listAttendance(
-  orgId: string,
-  eventId: string,
-): Promise<AttendanceRow[]> {
+export async function listAttendance(orgId: string, eventId: string): Promise<AttendanceRow[]> {
   const rows = await db
     .select({
       reg: registrations,
@@ -660,9 +662,7 @@ export async function fetchAttendanceForMeetingUuid(meetingUuid: string): Promis
     .select()
     .from(eventRegistrants)
     .where(eq(eventRegistrants.eventId, link.eventId));
-  const byEmail = new Map(
-    existing.map((row) => [row.email.toLowerCase(), row] as const),
-  );
+  const byEmail = new Map(existing.map((row) => [row.email.toLowerCase(), row] as const));
   const byRegistrant = new Map(
     existing
       .filter((row) => row.externalRegistrantId)
@@ -673,8 +673,7 @@ export async function fetchAttendanceForMeetingUuid(meetingUuid: string): Promis
 
   for (const p of participants) {
     const match =
-      (p.registrantId && byRegistrant.get(p.registrantId)) ||
-      (p.email && byEmail.get(p.email));
+      (p.registrantId && byRegistrant.get(p.registrantId)) || (p.email && byEmail.get(p.email));
     if (!match) continue;
     matchedIds.add(match.id);
     const attendedDuration = p.durationSeconds ?? null;

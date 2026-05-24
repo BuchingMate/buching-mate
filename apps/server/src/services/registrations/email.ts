@@ -1,45 +1,29 @@
-import { Resend } from "resend";
-import { getLogger } from "../../observability/request-context";
 import { buildEventIcs } from "../../lib/ics";
-
-let resend: Resend | null = null;
-
-function getResend() {
-  if (!resend && process.env.RESEND_API_KEY) {
-    resend = new Resend(process.env.RESEND_API_KEY);
-  }
-  return resend;
-}
+import { sendTenantEmail } from "../email/mailer";
 
 export async function sendBookingResumeEmail({
+  orgId,
   to,
   eventTitle,
   orgName,
   resumeUrl,
 }: {
+  orgId: string;
   to: string;
   eventTitle: string;
   orgName: string;
   resumeUrl: string;
 }) {
-  if (!process.env.RESEND_API_KEY || !process.env.RESEND_FROM_EMAIL) {
-    getLogger().info({ to, eventTitle, orgName, resumeUrl }, "dev resume email");
-    return;
-  }
-
-  try {
-    await getResend()?.emails.send({
-      from: process.env.RESEND_FROM_EMAIL,
-      to,
-      subject: `Complete your booking for ${eventTitle}`,
-      html: renderResumeHtml({ eventTitle, orgName, resumeUrl }),
-    });
-  } catch (err) {
-    getLogger().warn({ err, to, eventTitle }, "resume email send failed");
-  }
+  await sendTenantEmail({
+    orgId,
+    to,
+    subject: `Complete your booking for ${eventTitle}`,
+    html: renderResumeHtml({ eventTitle, orgName, resumeUrl }),
+  });
 }
 
 export async function sendBookingConfirmationEmail({
+  orgId,
   to,
   attendeeName,
   eventTitle,
@@ -55,6 +39,7 @@ export async function sendBookingConfirmationEmail({
   eventId,
   description,
 }: {
+  orgId: string;
   to: string;
   attendeeName: string;
   eventTitle: string;
@@ -70,14 +55,6 @@ export async function sendBookingConfirmationEmail({
   eventId?: string;
   description?: string | null;
 }) {
-  if (!process.env.RESEND_API_KEY || !process.env.RESEND_FROM_EMAIL) {
-    getLogger().info(
-      { to, attendeeName, eventTitle, orgName, eventDate, eventTime, location, registrationId },
-      "dev booking confirmation email",
-    );
-    return;
-  }
-
   const icsAttachment =
     startUtc && endUtc
       ? {
@@ -100,26 +77,22 @@ export async function sendBookingConfirmationEmail({
         }
       : null;
 
-  try {
-    await getResend()?.emails.send({
-      from: process.env.RESEND_FROM_EMAIL,
-      to,
-      subject: `Booking confirmed for ${eventTitle}`,
-      html: renderConfirmationHtml({
-        attendeeName,
-        eventTitle,
-        orgName,
-        eventDate,
-        eventTime,
-        location,
-        registrationId,
-        joinUrl: joinUrl ?? null,
-      }),
-      attachments: icsAttachment ? [icsAttachment] : undefined,
-    });
-  } catch (err) {
-    getLogger().warn({ err, to, eventTitle, registrationId }, "confirmation email send failed");
-  }
+  await sendTenantEmail({
+    orgId,
+    to,
+    subject: `Booking confirmed for ${eventTitle}`,
+    html: renderConfirmationHtml({
+      attendeeName,
+      eventTitle,
+      orgName,
+      eventDate,
+      eventTime,
+      location,
+      registrationId,
+      joinUrl: joinUrl ?? null,
+    }),
+    attachments: icsAttachment ? [icsAttachment] : undefined,
+  });
 }
 
 function renderResumeHtml({

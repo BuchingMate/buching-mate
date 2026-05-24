@@ -12,8 +12,13 @@ function extractCookieHeader(res: Response): string {
   const cookies =
     typeof res.headers.getSetCookie === "function"
       ? res.headers.getSetCookie()
-      : ((res.headers.get("set-cookie") ?? "").split(/,(?=\s*[^;\s]+=)/g).filter(Boolean) as string[]);
-  return cookies.map((c) => c.split(";")[0]?.trim()).filter(Boolean).join("; ");
+      : ((res.headers.get("set-cookie") ?? "")
+          .split(/,(?=\s*[^;\s]+=)/g)
+          .filter(Boolean) as string[]);
+  return cookies
+    .map((c) => c.split(";")[0]?.trim())
+    .filter(Boolean)
+    .join("; ");
 }
 
 export interface SignedUpUser {
@@ -61,10 +66,7 @@ export async function signUpAndCreateOrg(): Promise<OrgFixture> {
   return { ...owner, orgId: org.id };
 }
 
-export async function addUserToOrg(
-  orgId: string,
-  role: OrgRole = "viewer",
-): Promise<SignedUpUser> {
+export async function addUserToOrg(orgId: string, role: OrgRole = "viewer"): Promise<SignedUpUser> {
   const u = await signUpUser();
   await db.insert(member).values({
     id: crypto.randomUUID(),

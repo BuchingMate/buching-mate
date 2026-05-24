@@ -83,6 +83,19 @@ export const eventRegistrantStatus = pgEnum("event_registrant_status", [
   "no_show",
 ]);
 export const zoomAccountType = pgEnum("zoom_account_type", ["basic", "licensed", "on_prem"]);
+export const emailDomainStatus = pgEnum("email_domain_status", [
+  "pending",
+  "verifying",
+  "active",
+  "failed",
+]);
+export const broadcastKind = pgEnum("broadcast_kind", ["newsletter", "invitation"]);
+export const broadcastStatus = pgEnum("broadcast_status", ["draft", "sending", "sent", "failed"]);
+export const broadcastRecipientStatus = pgEnum("broadcast_recipient_status", [
+  "pending",
+  "sent",
+  "failed",
+]);
 
 export const orgSettings = pgTable(
   "org_settings",
@@ -102,6 +115,9 @@ export const orgSettings = pgTable(
     webhookUrl: text("webhook_url"),
     webhookSecret: text("webhook_secret"),
     emailTemplates: jsonb("email_templates").$type<Record<string, unknown>>().notNull().default({}),
+    // Weekly broadcast send cap from an active capacity add-on. Null means no
+    // add-on: the plan's base cap applies.
+    broadcastWeeklyCap: integer("broadcast_weekly_cap"),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
@@ -495,6 +511,80 @@ export const webhookDeliveries = pgTable(
     index("webhook_deliveries_org_id_idx").on(table.orgId),
     index("webhook_deliveries_org_status_idx").on(table.orgId, table.status),
   ],
+);
+
+// One custom sending domain per org. The org gives us a domain, we register it in
+// our Resend account, and store the DNS records the org must publish. Status tracks
+// the path pending -> verifying -> active (or failed). Sent mail uses the domain
+// only once it is active.
+export const orgEmailDomains = pgTable(
+  "org_email_domains",
+  {
+    id: id(),
+    orgId: text("org_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    domain: text("domain").notNull(),
+    resendDomainId: text("resend_domain_id").notNull(),
+    status: emailDomainStatus("status").notNull().default("pending"),
+    dnsRecords: jsonb("dns_records")
+      .$type<import("@workspace/contracts").EmailDnsRecord[]>()
+      .notNull()
+      .default([]),
+    lastCheckedAt: timestamp("last_checked_at"),
+    verifiedAt: timestamp("verified_at"),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (table) => [uniqueIndex("org_email_domains_org_idx").on(table.orgId)],
+);
+
+// A newsletter or invitation an org composes and sends to a list. This is the
+// only org-composed mail, and the only mail that counts toward the weekly send
+// quota. The audience selector records who it targets; recipients are expanded
+// into broadcast_recipients at send time.
+export const broadcasts = pgTable(
+  "broadcasts",
+  {
+    id: id(),
+    orgId: text("org_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    eventId: text("event_id").references(() => events.id, { onDelete: "set null" }),
+    kind: broadcastKind("kind").notNull(),
+    subject: text("subject").notNull(),
+    bodyHtml: text("body_html").notNull(),
+    status: broadcastStatus("status").notNull().default("draft"),
+    audience: jsonb("audience").$type<import("@workspace/contracts").BroadcastAudience>().notNull(),
+    recipientCount: integer("recipient_count").notNull().default(0),
+    sentCount: integer("sent_count").notNull().default(0),
+    sentAt: timestamp("sent_at"),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (table) => [index("broadcasts_org_idx").on(table.orgId)],
+);
+
+// One row per recipient of a broadcast. Tracks per-address send status so a retry
+// does not send twice and so failures are visible.
+export const broadcastRecipients = pgTable(
+  "broadcast_recipients",
+  {
+    id: id(),
+    broadcastId: text("broadcast_id")
+      .notNull()
+      .references(() => broadcasts.id, { onDelete: "cascade" }),
+    orgId: text("org_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    email: text("email").notNull(),
+    attendeeId: text("attendee_id").references(() => attendees.id, { onDelete: "set null" }),
+    status: broadcastRecipientStatus("status").notNull().default("pending"),
+    error: text("error"),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (table) => [uniqueIndex("broadcast_recipients_unique_idx").on(table.broadcastId, table.email)],
 );
 
 export const videoConnections = pgTable(
