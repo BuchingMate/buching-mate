@@ -22,6 +22,7 @@ import { eventResourcesQueryOptions, resourcesQueryOptions } from "@/queries/res
 import { canDeleteEvents, canManageEvents } from "@/lib/permissions";
 import { getOrgPublicUrl } from "@/lib/public";
 import { useUpdateEvent } from "@/hooks/use-events";
+import { useOrgCurrency } from "@/hooks/use-org";
 import { useReplaceEventResources } from "@/hooks/use-resources";
 import { RegistrationsTable } from "./registrations-table";
 import { RegistrationSummary } from "./registration-summary";
@@ -38,6 +39,7 @@ export function EventDetailPage({
   eventId: string;
   orgContext: Awaited<ReturnType<typeof getCurrentOrg>>;
 }) {
+  const currency = useOrgCurrency();
   const canManage = canManageEvents(orgContext.memberRole);
   const canDelete = canDeleteEvents(orgContext.memberRole);
   const [error, setError] = useState("");
@@ -68,7 +70,7 @@ export function EventDetailPage({
   const form = useEventDetailsForm({ event, saveMutation, onError: setError });
 
   useEffect(() => {
-    form.reset(eventToForm(event));
+    form.reset(eventToForm(event, currency));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [event.id]);
 

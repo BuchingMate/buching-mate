@@ -35,6 +35,7 @@ import { canManageEvents } from "@/lib/permissions";
 import { formatPrice } from "@/lib/public";
 import { eventKeys, eventsQueryOptions } from "@/queries/events";
 import { useCreateEvent, useDuplicateEvent } from "@/hooks/use-events";
+import { useOrgCurrency } from "@/hooks/use-org";
 import { resourcesQueryOptions } from "@/queries/resources";
 import { uploadPublicAsset } from "@/lib/assets";
 import { replaceEventResources } from "@/lib/resources";
@@ -110,6 +111,7 @@ function Events() {
   } = useSuspenseQuery(eventsQueryOptions);
 
   const createMutation = useCreateEvent();
+  const currency = useOrgCurrency();
   const duplicateMutation = useDuplicateEvent();
   const { data: resourcesData } = useQuery({
     ...resourcesQueryOptions({ includeArchived: true }),
@@ -191,7 +193,9 @@ function Events() {
     setError("");
 
     try {
-      const { event: createdEvent } = await createMutation.mutateAsync(formToEventRequest(form));
+      const { event: createdEvent } = await createMutation.mutateAsync(
+        formToEventRequest(form, currency),
+      );
       const assignments = resourceAssignments.filter(
         (assignment) => assignment.resourceId && assignment.role.trim(),
       );
@@ -724,6 +728,7 @@ function KanbanColumn({
 }
 
 function KanbanCard({ event, canManage }: { event: EventDto; canManage: boolean }) {
+  const currency = useOrgCurrency();
   const { ref, handleRef, isDragSource } = useDraggable({
     id: event.id,
     type: "event",
@@ -766,7 +771,7 @@ function KanbanCard({ event, canManage }: { event: EventDto; canManage: boolean 
           </Badge>
         )}
         <Badge variant="outline" className="h-5 px-1.5 text-3xs">
-          {event.price === 0 ? "Free" : formatPrice(event.price, "USD")}
+          {event.price === 0 ? "Free" : formatPrice(event.price, currency)}
         </Badge>
         <Badge variant="outline" className="h-5 px-1.5 text-3xs">
           {event.confirmedRegistrations}

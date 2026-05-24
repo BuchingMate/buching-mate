@@ -1,8 +1,9 @@
 /* eslint-disable react/no-children-prop */
 import { useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import type { EventImageDto } from "@workspace/contracts";
-import { orgSettingsQueryOptions } from "@/queries/org";
+import { useOrgCurrency } from "@/hooks/use-org";
+import { currencySymbol } from "@/lib/public";
 import { ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -43,8 +44,8 @@ export function EventDetailsForm({
   const queryClient = useQueryClient();
   const [removingImageId, setRemovingImageId] = useState<string | null>(null);
   const [section, setSection] = useState<string>("basics");
-  const { data: orgSettings } = useQuery(orgSettingsQueryOptions);
-  const currency = orgSettings?.settings.currency ?? "USD";
+  const currency = useOrgCurrency();
+  const symbol = currencySymbol(currency);
 
   const refreshEvent = async () => {
     await queryClient.invalidateQueries({ queryKey: eventKeys.detail(eventId) });
@@ -306,7 +307,7 @@ export function EventDetailsForm({
                     <Label htmlFor={field.name}>Price</Label>
                     <div className="flex h-9 w-full items-center rounded-md border bg-background shadow-xs focus-within:border-ring focus-within:ring-[3px] focus-within:ring-ring/50">
                       <span className="flex h-full select-none items-center border-r px-3 text-sm font-medium text-muted-foreground">
-                        {currency}
+                        {symbol}
                       </span>
                       <Input
                         id={field.name}
@@ -315,7 +316,6 @@ export function EventDetailsForm({
                         onChange={(e) => field.handleChange(e.target.value)}
                         onBlur={field.handleBlur}
                         disabled={!canManage}
-                        required
                         placeholder="0.00"
                         className="h-full flex-1 border-0 bg-transparent shadow-none focus-visible:ring-0"
                       />

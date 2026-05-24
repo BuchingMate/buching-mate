@@ -186,10 +186,36 @@ export function getPublicRequestInfo() {
   };
 }
 
-const ZERO_DECIMAL = new Set(["JPY", "KRW", "VND", "HUF", "TWD", "CLP", "ISK"]);
+export const DEFAULT_CURRENCY = "USD";
 
 function decimalsFor(currency: string) {
-  return ZERO_DECIMAL.has(currency.toUpperCase()) ? 0 : 2;
+  try {
+    return (
+      new Intl.NumberFormat(undefined, { style: "currency", currency }).resolvedOptions()
+        .maximumFractionDigits ?? 2
+    );
+  } catch {
+    return 2;
+  }
+}
+
+/** Localized currency symbol (e.g. "$", "€", "¥"); falls back to the code. */
+export function currencySymbol(currency: string, locale?: string) {
+  try {
+    const parts = new Intl.NumberFormat(locale, { style: "currency", currency }).formatToParts(0);
+    return parts.find((part) => part.type === "currency")?.value ?? currency;
+  } catch {
+    return currency;
+  }
+}
+
+/** All ISO 4217 currencies the runtime supports, with localized names. */
+export function listCurrencies(locale?: string): { code: string; name: string }[] {
+  const names = new Intl.DisplayNames(locale ? [locale] : undefined, { type: "currency" });
+  return Intl.supportedValuesOf("currency").map((code) => ({
+    code,
+    name: names.of(code) ?? code,
+  }));
 }
 
 export function centsToMajor(cents: number, currency: string) {

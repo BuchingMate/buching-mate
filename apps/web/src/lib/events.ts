@@ -17,8 +17,7 @@ export const eventFormSchema = z.object({
   description: z.string(),
   notes: z.string(),
   location: z.string(),
-  price: z.string().regex(/^\d+(\.\d{1,2})?$/, "Price must look like 0.00"),
-  isFree: z.enum(["true", "false"]),
+  price: z.string().regex(/^(\d+(\.\d{1,2})?)?$/, "Price must look like 0.00"),
   recurring: z.enum(["true", "false"]),
   recurrenceFrequency: z.string(),
   recurrenceInterval: z.string().regex(/^\d*$/, "Interval must be a whole number"),
@@ -44,7 +43,6 @@ export const emptyEventForm: EventFormState = {
   notes: "",
   location: "",
   price: "0.00",
-  isFree: "false",
   recurring: "false",
   recurrenceFrequency: "",
   recurrenceInterval: "",
@@ -71,7 +69,7 @@ export function defaultEventForm(): EventFormState {
   return { ...emptyEventForm, date, time: nextHalfHour(now) };
 }
 
-export function eventToForm(event: EventDto): EventFormState {
+export function eventToForm(event: EventDto, currency: string): EventFormState {
   return {
     title: event.title,
     date: event.date,
@@ -86,8 +84,7 @@ export function eventToForm(event: EventDto): EventFormState {
     description: event.description ?? "",
     notes: event.notes ?? "",
     location: event.location ?? "",
-    price: centsToMajorString(event.price, "USD"),
-    isFree: event.price === 0 ? "true" : "false",
+    price: centsToMajorString(event.price, currency),
     recurring: event.recurring ? "true" : "false",
     recurrenceFrequency: event.recurrenceFrequency ?? "",
     recurrenceInterval: event.recurrenceInterval === null ? "" : String(event.recurrenceInterval),
@@ -97,7 +94,7 @@ export function eventToForm(event: EventDto): EventFormState {
   };
 }
 
-export function formToEventRequest(form: EventFormState): CreateEventRequest {
+export function formToEventRequest(form: EventFormState, currency: string): CreateEventRequest {
   const allDay = form.allDay === "true";
   return {
     title: form.title,
@@ -116,7 +113,7 @@ export function formToEventRequest(form: EventFormState): CreateEventRequest {
     description: form.description.trim() || null,
     notes: form.notes.trim() || null,
     location: form.location.trim() || null,
-    price: form.isFree === "true" ? 0 : majorStringToCents(form.price, "USD"),
+    price: majorStringToCents(form.price, currency),
     recurring: form.recurring === "true",
     recurrenceFrequency: form.recurrenceFrequency.trim() || null,
     recurrenceInterval: form.recurrenceInterval ? Number(form.recurrenceInterval) : null,

@@ -5,7 +5,7 @@ import { CalendarDays } from "lucide-react";
 import type { EventDto } from "@workspace/contracts";
 import { makeAppHead } from "@/lib/seo";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { formatPrice, getPublicRequestInfo } from "@/lib/public";
+import { DEFAULT_CURRENCY, formatPrice, getPublicRequestInfo } from "@/lib/public";
 import { publicEventsQueryOptions, publicOrgQueryOptions } from "@/queries/public";
 import { NoSubdomainPlaceholder } from "./~components/no-subdomain";
 import { PUBLIC_ALL_CATEGORIES, PublicBrandBar } from "./~components/public-brand-bar";
@@ -53,7 +53,7 @@ function PublicOrgEventsContent({ slug }: { slug: string }) {
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState<string>(ALL_CATEGORIES);
 
-  const currency = orgData.settings?.currency ?? "USD";
+  const currency = orgData.settings?.currency ?? DEFAULT_CURRENCY;
   const categories = orgData.settings?.categories ?? [];
 
   const sortedEvents = useMemo(() => {

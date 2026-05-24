@@ -2,8 +2,9 @@ import { useEffect, useMemo, useState } from "react";
 import { Check, ChevronDown, ImageIcon, Plus, Search, Upload, X } from "lucide-react";
 import type { EventStatus, EventVisibility, ResourceDto, ResourceType } from "@workspace/contracts";
 import { cn } from "@/lib/utils";
+import { currencySymbol } from "@/lib/public";
+import { useOrgCurrency } from "@/hooks/use-org";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { DatePicker } from "@/components/ui/date-picker";
 import { Input } from "@/components/ui/input";
@@ -137,8 +138,7 @@ function isStepValid(step: StepKey, form: EventFormState) {
     );
   }
   if (step === "details") {
-    if (form.isFree === "true") return true;
-    return /^\d+(\.\d{1,2})?$/.test(form.price);
+    return /^(\d+(\.\d{1,2})?)?$/.test(form.price);
   }
   return true;
 }
@@ -452,7 +452,7 @@ function FilePreview({ file, children }: { file: File; children: React.ReactNode
 
 function DetailsSection({ form, onChange }: EventFormProps) {
   const [extrasOpen, setExtrasOpen] = useState(false);
-  const isFree = form.isFree === "true";
+  const symbol = currencySymbol(useOrgCurrency());
 
   return (
     <div className="space-y-4">
@@ -468,31 +468,20 @@ function DetailsSection({ form, onChange }: EventFormProps) {
       </div>
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <Label htmlFor="create-price">Price</Label>
-            <label className="flex items-center gap-2 text-xs text-muted-foreground">
-              <Checkbox
-                checked={isFree}
-                onCheckedChange={(checked) => onChange("isFree", checked ? "true" : "false")}
-              />
-              Free
-            </label>
-          </div>
+          <Label htmlFor="create-price">Price</Label>
           <div className="relative">
             <Input
               id="create-price"
-              value={isFree ? "" : form.price}
+              value={form.price}
               onChange={(e) => onChange("price", e.target.value)}
-              disabled={isFree}
-              placeholder={isFree ? "Free" : "0.00"}
+              placeholder="0.00"
               className="pr-14"
             />
-            {!isFree && (
-              <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-xs font-medium text-muted-foreground">
-                USD
-              </span>
-            )}
+            <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-xs font-medium text-muted-foreground">
+              {symbol}
+            </span>
           </div>
+          <p className="text-xs text-muted-foreground">Leave 0.00 for a free event.</p>
         </div>
         <div className="space-y-2">
           <Label htmlFor="create-category">Category</Label>
