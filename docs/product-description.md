@@ -4,7 +4,7 @@ Buching is a hybrid event booking SaaS for organizations that run classes, works
 
 The main public-facing object is an event: something people can browse and register for. Internally, the platform treats the things needed to run those events as resources, such as instructors, locations, materials, equipment, or other custom assets. This keeps the product event-first today while leaving room for future appointment-style or resource-availability booking later.
 
-Organizations use Buching to create events, manage attendees, track registrations, assign resources, accept payments, share public booking pages, and monitor operational activity.
+Organizations use Buching to create events, manage attendees, track registrations, assign resources, accept payments, send newsletters and invitations, share public booking pages, and monitor operational activity.
 
 ## Target Users
 
@@ -142,6 +142,15 @@ Example Pro plan:
 - Webhooks.
 - Advanced payment/provider capabilities.
 
+Weekly email sends:
+
+- Free: up to 500 broadcast sends a week.
+- Team: up to 5,000 broadcast sends a week.
+- Enterprise: unlimited.
+- Emails to a single event's own guests are always free and never counted.
+- An organization that needs more can buy a Broadcasts capacity add-on (10k, 25k, 50k, 75k, or 100k sends a week) on top of Team. The add-on sets the new weekly total.
+- Going over the weekly limit blocks the send and prompts an upgrade.
+
 ### Webhooks
 
 Organizations can configure webhook endpoints to receive event updates.
@@ -177,6 +186,41 @@ Features:
 - Payment confirmation template.
 - Cancellation template.
 - Template variables such as org name, event title, event date, attendee name, and booking URL.
+
+### Email Sending and Branding
+
+Every email an organization sends carries that organization's own identity.
+
+Sender:
+
+- Emails show the organization's name, and replies go to its contact address.
+- Team-plan organizations can add their own sending domain (for example `mail.acme.com`), verify it through DNS records shown in Settings, and send from their own address.
+- Organizations without a custom domain send from the shared platform address, still showing their name.
+
+Branding:
+
+- Set an accent color, logo, and footer text once.
+- The same brand wraps every newsletter and invitation the organization sends.
+- A live preview shows exactly what recipients will see.
+
+### Broadcasts
+
+Broadcasts are one-off emails an organization sends to its people, separate from the automatic booking emails.
+
+There are two kinds:
+
+- Newsletter: news or updates for past attendees.
+- Invitation: an invite, for example to a new event.
+
+Features:
+
+- Write a subject and message, with a live preview of the finished email.
+- Choose who it reaches: all past attendees, or the guests of one event.
+- Save as a draft, then send it when ready.
+- Sends in the background and records how many people it reached.
+- History list showing each broadcast's type, audience, status, and reach.
+
+How sends are counted is covered under Plan Limits below.
 
 ### Dashboard
 
@@ -222,6 +266,7 @@ Sections:
 - Payments.
 - Webhooks.
 - Email templates.
+- Email sending domain, branding, and broadcast plan.
 - Plan limits.
 
 ## Deferred
