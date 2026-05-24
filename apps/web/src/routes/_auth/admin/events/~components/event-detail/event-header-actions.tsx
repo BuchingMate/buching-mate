@@ -123,7 +123,11 @@ function PublicEventActions({
 
   return (
     <>
-      <Button variant="outline" render={<a href={url} target="_blank" rel="noreferrer" />}>
+      <Button
+        variant="outline"
+        nativeButton={false}
+        render={<a href={url} target="_blank" rel="noreferrer" />}
+      >
         <ExternalLink className="size-4" />
         View public page
       </Button>
