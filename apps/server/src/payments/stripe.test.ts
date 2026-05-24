@@ -13,7 +13,11 @@ const stripeMock = {
     },
   },
   oauth: {
-    token: mock<AnyFn>(async () => ({ stripe_user_id: "acct_1", livemode: false, scope: "read_write" })),
+    token: mock<AnyFn>(async () => ({
+      stripe_user_id: "acct_1",
+      livemode: false,
+      scope: "read_write",
+    })),
   },
   accounts: {
     retrieve: mock<AnyFn>(async () => ({
@@ -91,7 +95,9 @@ describe("createCheckout", () => {
       Record<string, unknown>,
       Record<string, unknown>,
     ];
-    const lineItems = (params.line_items as Array<{ price_data: { currency: string; unit_amount: number } }>)[0];
+    const lineItems = (
+      params.line_items as Array<{ price_data: { currency: string; unit_amount: number } }>
+    )[0];
     expect(lineItems.price_data.currency).toBe("usd");
     expect(lineItems.price_data.unit_amount).toBe(5000);
     expect(opts.stripeAccount).toBe("acct_123");

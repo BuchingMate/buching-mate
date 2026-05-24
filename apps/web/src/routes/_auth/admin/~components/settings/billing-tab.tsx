@@ -59,7 +59,8 @@ export function BillingTab(_props: { orgSlug: string }) {
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            Current plan <Badge variant={plan === "free" ? "secondary" : "default"}>{planLabel[plan]}</Badge>
+            Current plan{" "}
+            <Badge variant={plan === "free" ? "secondary" : "default"}>{planLabel[plan]}</Badge>
           </CardTitle>
           <CardDescription>
             {plan === "free"

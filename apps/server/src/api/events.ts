@@ -255,13 +255,8 @@ export const eventRoutes = new Hono<ApiEnv>()
         phone: typeof r.phone === "string" ? r.phone : null,
       });
     }
-    const result = await bulkImportRegistrations(
-      c.var.orgId,
-      c.req.param("eventId"),
-      rows,
-    );
-    if (result === "event_not_found")
-      return apiError(c, 404, "event_not_found", "Event not found");
+    const result = await bulkImportRegistrations(c.var.orgId, c.req.param("eventId"), rows);
+    if (result === "event_not_found") return apiError(c, 404, "event_not_found", "Event not found");
     return c.json(result);
   })
   .get("/:eventId/resources", async (c) =>

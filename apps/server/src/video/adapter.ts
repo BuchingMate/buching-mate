@@ -101,16 +101,9 @@ export interface VideoProviderAdapter {
   exchangeOAuthCode(input: { code: string; redirectUri: string }): Promise<VideoOAuthTokens>;
   refreshAccessToken(refreshToken: string): Promise<VideoOAuthTokens>;
   createMeeting(accessToken: string, input: CreateMeetingInput): Promise<CreatedMeeting>;
-  updateMeeting(
-    accessToken: string,
-    meetingId: string,
-    input: UpdateMeetingInput,
-  ): Promise<void>;
+  updateMeeting(accessToken: string, meetingId: string, input: UpdateMeetingInput): Promise<void>;
   deleteMeeting(accessToken: string, meetingId: string): Promise<void>;
-  createRegistrant(
-    accessToken: string,
-    input: CreateRegistrantInput,
-  ): Promise<CreatedRegistrant>;
+  createRegistrant(accessToken: string, input: CreateRegistrantInput): Promise<CreatedRegistrant>;
   cancelRegistrant(accessToken: string, input: CancelRegistrantInput): Promise<void>;
   getPastParticipants(accessToken: string, meetingUuid: string): Promise<PastParticipant[]>;
   verifyAndParseWebhook(

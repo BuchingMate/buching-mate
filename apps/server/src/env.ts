@@ -117,7 +117,10 @@ export const TRUSTED_ORIGINS = (() => {
       set.add(`${parsed.protocol}//*${suffix}${port}`);
     }
   }
-  for (const extra of (Bun.env.TRUSTED_ORIGINS ?? "").split(",").map((s) => s.trim()).filter(Boolean)) {
+  for (const extra of (Bun.env.TRUSTED_ORIGINS ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean)) {
     set.add(extra);
   }
   return Array.from(set);

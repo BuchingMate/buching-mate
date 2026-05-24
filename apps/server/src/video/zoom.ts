@@ -258,17 +258,14 @@ export function createZoomAdapter(): VideoProviderAdapter {
     },
 
     async cancelRegistrant(accessToken, input: CancelRegistrantInput): Promise<void> {
-      await jsonFetch<unknown>(
-        `${ZOOM_API_BASE}/meetings/${input.meetingId}/registrants/status`,
-        {
-          method: "PUT",
-          body: JSON.stringify({
-            action: "cancel",
-            registrants: [{ id: input.registrantId, email: input.email }],
-          }),
-          authBearer: accessToken,
-        },
-      );
+      await jsonFetch<unknown>(`${ZOOM_API_BASE}/meetings/${input.meetingId}/registrants/status`, {
+        method: "PUT",
+        body: JSON.stringify({
+          action: "cancel",
+          registrants: [{ id: input.registrantId, email: input.email }],
+        }),
+        authBearer: accessToken,
+      });
     },
 
     async getPastParticipants(accessToken, meetingUuid): Promise<PastParticipant[]> {
@@ -312,9 +309,8 @@ export function createZoomAdapter(): VideoProviderAdapter {
             networkType: p.network_type ?? null,
           });
         }
-        nextPageToken = res.next_page_token && res.next_page_token.length > 0
-          ? res.next_page_token
-          : undefined;
+        nextPageToken =
+          res.next_page_token && res.next_page_token.length > 0 ? res.next_page_token : undefined;
       } while (nextPageToken);
       return all;
     },
@@ -372,9 +368,7 @@ export function createZoomAdapter(): VideoProviderAdapter {
       }
 
       if (parsed.event === "app_deauthorized") {
-        const payload = parsed.payload as
-          | { user_id?: string; account_id?: string }
-          | undefined;
+        const payload = parsed.payload as { user_id?: string; account_id?: string } | undefined;
         if (!payload?.user_id || !payload?.account_id) return null;
         return {
           type: "app.deauthorized",

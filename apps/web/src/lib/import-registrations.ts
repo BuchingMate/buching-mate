@@ -11,10 +11,7 @@ export type ImportOutcome = {
 };
 
 export function importRegistrations(eventId: string, rows: ImportRow[]) {
-  return api.post<ImportOutcome>(
-    `/api/events/${eventId}/registrations/import`,
-    { rows },
-  );
+  return api.post<ImportOutcome>(`/api/events/${eventId}/registrations/import`, { rows });
 }
 
 export function parseAttendeeCsv(text: string): ImportRow[] {

@@ -131,9 +131,7 @@ function AttendeeAuthSlot() {
         className="inline-flex items-center gap-1.5 rounded-md border border-white/30 px-3 py-1.5 text-sm font-medium text-primary-foreground hover:bg-white/10"
       >
         <UserRound className="size-4" />
-        <span className="hidden max-w-[160px] truncate sm:inline">
-          {session.user.email}
-        </span>
+        <span className="hidden max-w-[160px] truncate sm:inline">{session.user.email}</span>
         <span className="sm:hidden">Account</span>
       </Link>
     );

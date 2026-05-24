@@ -128,7 +128,8 @@ function PublicOrgEventsContent({ slug }: { slug: string }) {
 function HeroEvent({ event, currency }: { event: EventDto; currency: string }) {
   const dateLabel = formatDate(event.date);
   const timeLabel = formatTime(event.time);
-  const priceLabel = event.price > 0 ? `Tickets from ${formatPrice(event.price, currency)}` : "Get tickets";
+  const priceLabel =
+    event.price > 0 ? `Tickets from ${formatPrice(event.price, currency)}` : "Get tickets";
 
   return (
     <section className="relative w-full overflow-hidden bg-muted">
@@ -183,7 +184,11 @@ function PublicEventCard({ event, currency }: { event: EventDto; currency: strin
   const timeLabel = formatTime(event.time);
   const priceLabel = event.price > 0 ? formatPrice(event.price, currency) : "Free";
 
-  const kicker = full ? "Waitlist only" : low ? `Only ${remaining} left` : event.category ?? event.location;
+  const kicker = full
+    ? "Waitlist only"
+    : low
+      ? `Only ${remaining} left`
+      : (event.category ?? event.location);
   const kickerUrgent = full || low;
 
   return (
