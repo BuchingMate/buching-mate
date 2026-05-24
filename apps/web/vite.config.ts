@@ -14,6 +14,7 @@ export default defineConfig(async () => {
 
   return {
     envDir: "../..",
+    cacheDir: "../../.vite-cache/web",
     resolve: {
       tsconfigPaths: true,
     },

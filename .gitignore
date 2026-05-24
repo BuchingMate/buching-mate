@@ -19,6 +19,9 @@ coverage
 # Turbo
 .turbo
 
+# Vite cache (relocated out of node_modules via cacheDir in apps/web/vite.config.ts)
+.vite-cache
+
 # Vercel
 .vercel
 
