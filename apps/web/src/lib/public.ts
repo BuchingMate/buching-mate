@@ -38,6 +38,23 @@ export function getPublicEvent(slug: string, eventId: string) {
   );
 }
 
+export interface MapEventPin {
+  id: string;
+  title: string;
+  location: string | null;
+  latitude: number;
+  longitude: number;
+  start_date: string;
+  start_time: string;
+  image_url: string | null;
+}
+
+export function listPublicEventPins(slug: string) {
+  return api.get<{ pins: MapEventPin[] }>(
+    `/api/public/orgs/${encodeURIComponent(slug)}/events/map`,
+  );
+}
+
 export function publicRegister(slug: string, eventId: string, input: PublicRegistrationRequest) {
   return api.post<{ registration: RegistrationDto }>(
     `/api/public/orgs/${encodeURIComponent(slug)}/events/${encodeURIComponent(eventId)}/register`,

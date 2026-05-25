@@ -145,6 +145,8 @@ export interface EventDto {
   allDay: boolean;
   maxCapacity: number | null;
   location: string | null;
+  latitude: number | null;
+  longitude: number | null;
   status: EventStatus;
   visibility: EventVisibility;
   archivedAt: string | null;

@@ -143,6 +143,8 @@ export const events = pgTable(
     allDay: boolean("all_day").notNull().default(false),
     maxCapacity: integer("max_capacity"),
     location: text("location"),
+    latitude: numeric("latitude", { precision: 9, scale: 6 }),
+    longitude: numeric("longitude", { precision: 9, scale: 6 }),
     status: eventStatus("status").notNull().default("upcoming"),
     visibility: eventVisibility("visibility").notNull().default("unpublished"),
     archivedAt: timestamp("archived_at"),

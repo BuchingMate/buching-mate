@@ -16,6 +16,7 @@ import { Route as AttendeeRouteImport } from './routes/_attendee'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as EventsIndexRouteImport } from './routes/events.index'
 import { Route as InviteInvitationIdRouteImport } from './routes/invite.$invitationId'
+import { Route as EventsMapRouteImport } from './routes/events.map'
 import { Route as AuthSettingsRouteImport } from './routes/_auth/settings'
 import { Route as AuthOnboardingRouteImport } from './routes/_auth/onboarding'
 import { Route as AuthAdminRouteImport } from './routes/_auth/admin'
@@ -66,6 +67,11 @@ const EventsIndexRoute = EventsIndexRouteImport.update({
 const InviteInvitationIdRoute = InviteInvitationIdRouteImport.update({
   id: '/invite/$invitationId',
   path: '/invite/$invitationId',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const EventsMapRoute = EventsMapRouteImport.update({
+  id: '/events/map',
+  path: '/events/map',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuthSettingsRoute = AuthSettingsRouteImport.update({
@@ -171,6 +177,7 @@ export interface FileRoutesByFullPath {
   '/admin': typeof AuthAdminRouteWithChildren
   '/onboarding': typeof AuthOnboardingRoute
   '/settings': typeof AuthSettingsRoute
+  '/events/map': typeof EventsMapRoute
   '/invite/$invitationId': typeof InviteInvitationIdRoute
   '/events/': typeof EventsIndexRoute
   '/admin/calendar': typeof AuthAdminCalendarRoute
@@ -195,6 +202,7 @@ export interface FileRoutesByTo {
   '/signup': typeof SignupRoute
   '/onboarding': typeof AuthOnboardingRoute
   '/settings': typeof AuthSettingsRoute
+  '/events/map': typeof EventsMapRoute
   '/invite/$invitationId': typeof InviteInvitationIdRoute
   '/events': typeof EventsIndexRoute
   '/admin/calendar': typeof AuthAdminCalendarRoute
@@ -223,6 +231,7 @@ export interface FileRoutesById {
   '/_auth/admin': typeof AuthAdminRouteWithChildren
   '/_auth/onboarding': typeof AuthOnboardingRoute
   '/_auth/settings': typeof AuthSettingsRoute
+  '/events/map': typeof EventsMapRoute
   '/invite/$invitationId': typeof InviteInvitationIdRoute
   '/events/': typeof EventsIndexRoute
   '/_auth/admin/calendar': typeof AuthAdminCalendarRoute
@@ -250,6 +259,7 @@ export interface FileRouteTypes {
     | '/admin'
     | '/onboarding'
     | '/settings'
+    | '/events/map'
     | '/invite/$invitationId'
     | '/events/'
     | '/admin/calendar'
@@ -274,6 +284,7 @@ export interface FileRouteTypes {
     | '/signup'
     | '/onboarding'
     | '/settings'
+    | '/events/map'
     | '/invite/$invitationId'
     | '/events'
     | '/admin/calendar'
@@ -301,6 +312,7 @@ export interface FileRouteTypes {
     | '/_auth/admin'
     | '/_auth/onboarding'
     | '/_auth/settings'
+    | '/events/map'
     | '/invite/$invitationId'
     | '/events/'
     | '/_auth/admin/calendar'
@@ -326,6 +338,7 @@ export interface RootRouteChildren {
   AuthRoute: typeof AuthRouteWithChildren
   LoginRoute: typeof LoginRoute
   SignupRoute: typeof SignupRoute
+  EventsMapRoute: typeof EventsMapRoute
   InviteInvitationIdRoute: typeof InviteInvitationIdRoute
   EventsIndexRoute: typeof EventsIndexRoute
   EventsEventIdBookRoute: typeof EventsEventIdBookRoute
@@ -383,6 +396,13 @@ declare module '@tanstack/react-router' {
       path: '/invite/$invitationId'
       fullPath: '/invite/$invitationId'
       preLoaderRoute: typeof InviteInvitationIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/events/map': {
+      id: '/events/map'
+      path: '/events/map'
+      fullPath: '/events/map'
+      preLoaderRoute: typeof EventsMapRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_auth/settings': {
@@ -576,6 +596,7 @@ const rootRouteChildren: RootRouteChildren = {
   AuthRoute: AuthRouteWithChildren,
   LoginRoute: LoginRoute,
   SignupRoute: SignupRoute,
+  EventsMapRoute: EventsMapRoute,
   InviteInvitationIdRoute: InviteInvitationIdRoute,
   EventsIndexRoute: EventsIndexRoute,
   EventsEventIdBookRoute: EventsEventIdBookRoute,

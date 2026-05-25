@@ -31,6 +31,8 @@ export function toEventDto(
     allDay: event.allDay,
     maxCapacity: event.maxCapacity,
     location: event.location,
+    latitude: event.latitude !== null ? Number(event.latitude) : null,
+    longitude: event.longitude !== null ? Number(event.longitude) : null,
     status: event.status,
     visibility: event.visibility,
     archivedAt: event.archivedAt?.toISOString() ?? null,

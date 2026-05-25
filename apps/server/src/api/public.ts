@@ -18,7 +18,7 @@ import { createCheckoutForRegistration } from "../services/payments/checkout";
 import { verifyResumeToken } from "../services/payments/resume-token";
 import { db } from "../db";
 import { registrations, organization, events as eventsTable } from "../db/schema";
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 
 function parsePublicRegistration(input: unknown): PublicRegistrationRequest | string {
   if (!isRecord(input)) return "Request body must be an object";
@@ -66,6 +66,23 @@ export const publicRoutes = new Hono()
       return apiError(c, 404, "org_not_found", "Organization not found");
     }
     return c.json({ events });
+  })
+  .get("/orgs/:slug/events/map", async (c) => {
+    const slug = c.req.param("slug");
+    const org = await getPublicOrg(slug);
+    if (!org) return apiError(c, 404, "org_not_found", "Organization not found");
+    const rows = await db.execute(sql`
+      SELECT id, title, location, latitude::float8 AS latitude, longitude::float8 AS longitude,
+             start_date, start_time, image_url
+      FROM events
+      WHERE org_id = ${org.org.id}
+        AND visibility = 'published'
+        AND status = 'upcoming'
+        AND archived_at IS NULL
+        AND latitude IS NOT NULL
+        AND longitude IS NOT NULL
+    `);
+    return c.json({ pins: rows });
   })
   .get("/orgs/:slug/events/:eventId", async (c) => {
     const eventId = c.req.param("eventId");
