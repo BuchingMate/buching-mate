@@ -8,22 +8,18 @@ import { ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { DatePicker } from "@/components/ui/date-picker";
+import { ScheduleFields } from "../schedule-fields";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PublicAssetUpload } from "@/components/public-asset-upload";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import type { EventFormState } from "@/lib/events";
 import { deletePublicAsset } from "@/lib/assets";
 import { eventKeys } from "@/queries/events";
+import { CategoryChip, StatusChip, VisibilityChip } from "../event-chips";
+import { ScheduleSection } from "../event-form-parts";
+import { LocationField, type RecentLocation } from "../location-field";
+import { useEventFormFields } from "../use-event-form-fields";
 import type { useEventDetailsForm } from "./use-event-details-form";
 
 type FormApi = ReturnType<typeof useEventDetailsForm>;
@@ -34,18 +30,25 @@ export function EventDetailsForm({
   form,
   canManage,
   onError,
+  recentLocations,
+  zoomConnected,
+  onConnectZoom,
 }: {
   eventId: string;
   detailImages: EventImageDto[];
   form: FormApi;
   canManage: boolean;
   onError: (message: string) => void;
+  recentLocations: RecentLocation[];
+  zoomConnected: boolean;
+  onConnectZoom: () => void;
 }) {
   const queryClient = useQueryClient();
   const [removingImageId, setRemovingImageId] = useState<string | null>(null);
   const [section, setSection] = useState<string>("basics");
   const currency = useOrgCurrency();
   const symbol = currencySymbol(currency);
+  const { values, setField } = useEventFormFields(form);
 
   const refreshEvent = async () => {
     await queryClient.invalidateQueries({ queryKey: eventKeys.detail(eventId) });
@@ -81,12 +84,31 @@ export function EventDetailsForm({
         </TabsList>
 
         <BasicsPanel active={section === "basics"}>
-          <Card>
+          {/* overflow-visible so the LocationField dropdown isn't clipped by the card. */}
+          <Card className="overflow-visible">
             <CardHeader>
               <CardTitle>Schedule & capacity</CardTitle>
               <CardDescription>When, where, how many.</CardDescription>
             </CardHeader>
             <CardContent className="grid gap-x-8 gap-y-5 sm:grid-cols-2">
+              {/* Luma-style chips above the title. */}
+              <div className="flex flex-wrap items-center gap-2 sm:col-span-2">
+                <VisibilityChip
+                  value={values.visibility}
+                  disabled={!canManage}
+                  onChange={(v) => setField("visibility", v)}
+                />
+                <StatusChip
+                  value={values.status}
+                  disabled={!canManage}
+                  onChange={(v) => setField("status", v)}
+                />
+                <CategoryChip
+                  value={values.category}
+                  disabled={!canManage}
+                  onChange={(v) => setField("category", v)}
+                />
+              </div>
               <form.Field
                 name="title"
                 children={(field) => (
@@ -104,59 +126,11 @@ export function EventDetailsForm({
                 )}
               />
 
-              <form.Field
-                name="date"
-                children={(field) => (
-                  <div className="space-y-2">
-                    <Label htmlFor={field.name}>Date</Label>
-                    <DatePicker
-                      id={field.name}
-                      value={field.state.value}
-                      onChange={(value) => field.handleChange(value)}
-                      onBlur={field.handleBlur}
-                      disabled={!canManage}
-                      required
-                    />
-                  </div>
-                )}
-              />
-              <form.Field
-                name="time"
-                children={(field) => (
-                  <div className="space-y-2">
-                    <Label htmlFor={field.name}>Time</Label>
-                    <Input
-                      id={field.name}
-                      type="time"
-                      value={field.state.value}
-                      onChange={(e) => field.handleChange(e.target.value)}
-                      onBlur={field.handleBlur}
-                      disabled={!canManage}
-                      required
-                    />
-                  </div>
-                )}
-              />
+              <div className="space-y-2 sm:col-span-2">
+                <Label>Date &amp; time</Label>
+                <ScheduleFields form={values} onChange={setField} disabled={!canManage} />
+              </div>
 
-              <form.Field
-                name="duration"
-                children={(field) => (
-                  <div className="space-y-2">
-                    <Label htmlFor={field.name}>Duration</Label>
-                    <Input
-                      id={field.name}
-                      type="number"
-                      min="1"
-                      value={field.state.value}
-                      onChange={(e) => field.handleChange(e.target.value)}
-                      onBlur={field.handleBlur}
-                      disabled={!canManage}
-                      required
-                    />
-                    <p className="text-xs text-muted-foreground">In minutes.</p>
-                  </div>
-                )}
-              />
               <form.Field
                 name="maxCapacity"
                 children={(field) => (
@@ -176,69 +150,26 @@ export function EventDetailsForm({
                 )}
               />
 
-              <form.Field
-                name="location"
-                children={(field) => (
-                  <div className="space-y-2 sm:col-span-2">
-                    <Label htmlFor={field.name}>Location</Label>
-                    <Input
-                      id={field.name}
-                      value={field.state.value}
-                      onChange={(e) => field.handleChange(e.target.value)}
-                      onBlur={field.handleBlur}
-                      disabled={!canManage}
-                    />
-                  </div>
-                )}
-              />
-
-              <form.Field
-                name="status"
-                children={(field) => (
-                  <div className="space-y-2">
-                    <Label htmlFor={field.name}>Status</Label>
-                    <Select
-                      value={field.state.value}
-                      onValueChange={(value) =>
-                        field.handleChange(value as EventFormState["status"])
-                      }
-                      disabled={!canManage}
-                    >
-                      <SelectTrigger id={field.name}>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent alignItemWithTrigger={false}>
-                        <SelectItem value="upcoming">Upcoming</SelectItem>
-                        <SelectItem value="completed">Completed</SelectItem>
-                        <SelectItem value="cancelled">Cancelled</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                )}
-              />
-              <form.Field
-                name="visibility"
-                children={(field) => (
-                  <div className="space-y-2">
-                    <Label htmlFor={field.name}>Visibility</Label>
-                    <Select
-                      value={field.state.value}
-                      onValueChange={(value) =>
-                        field.handleChange(value as EventFormState["visibility"])
-                      }
-                      disabled={!canManage}
-                    >
-                      <SelectTrigger id={field.name}>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent alignItemWithTrigger={false}>
-                        <SelectItem value="unpublished">Unpublished</SelectItem>
-                        <SelectItem value="published">Published</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                )}
-              />
+              <div className="space-y-2 sm:col-span-2">
+                <Label>Location</Label>
+                <LocationField
+                  value={values.location}
+                  disabled={!canManage}
+                  recentLocations={recentLocations}
+                  videoProvider={values.videoProvider}
+                  zoomConnected={zoomConnected}
+                  onConnectZoom={onConnectZoom}
+                  onVideoProviderChange={(p) => setField("videoProvider", p)}
+                  onChange={(v) => setField("location", v)}
+                  onCoords={(lat, lng) => {
+                    setField("locationLat", lat);
+                    setField("locationLng", lng);
+                  }}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Search an address, paste a virtual link, or create a Zoom meeting.
+                </p>
+              </div>
             </CardContent>
           </Card>
 
@@ -285,21 +216,6 @@ export function EventDetailsForm({
               <CardDescription>Description, classification, pricing.</CardDescription>
             </CardHeader>
             <CardContent className="grid gap-x-8 gap-y-5 sm:grid-cols-2">
-              <form.Field
-                name="category"
-                children={(field) => (
-                  <div className="space-y-2">
-                    <Label htmlFor={field.name}>Category</Label>
-                    <Input
-                      id={field.name}
-                      value={field.state.value}
-                      onChange={(e) => field.handleChange(e.target.value)}
-                      onBlur={field.handleBlur}
-                      disabled={!canManage}
-                    />
-                  </div>
-                )}
-              />
               <form.Field
                 name="price"
                 children={(field) => (
@@ -445,110 +361,10 @@ export function EventDetailsForm({
           <Card>
             <CardHeader>
               <CardTitle>Recurrence</CardTitle>
-              <CardDescription>
-                Stored on the event for future recurrence expansion.
-              </CardDescription>
+              <CardDescription>Repeat this event on a set schedule.</CardDescription>
             </CardHeader>
-            <CardContent className="grid gap-x-8 gap-y-5 sm:grid-cols-2">
-              <form.Field
-                name="recurring"
-                children={(field) => (
-                  <div className="space-y-2">
-                    <Label>Repeats</Label>
-                    <Select
-                      value={field.state.value}
-                      onValueChange={(value) =>
-                        field.handleChange(value as EventFormState["recurring"])
-                      }
-                      disabled={!canManage}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent alignItemWithTrigger={false}>
-                        <SelectItem value="false">No</SelectItem>
-                        <SelectItem value="true">Yes</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                )}
-              />
-              <form.Field
-                name="recurrenceFrequency"
-                children={(field) => (
-                  <div className="space-y-2">
-                    <Label>Frequency</Label>
-                    <Select
-                      value={field.state.value || "none"}
-                      onValueChange={(value) =>
-                        field.handleChange(value === "none" || value === null ? "" : value)
-                      }
-                      disabled={!canManage}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent alignItemWithTrigger={false}>
-                        <SelectItem value="none">None</SelectItem>
-                        <SelectItem value="daily">Daily</SelectItem>
-                        <SelectItem value="weekly">Weekly</SelectItem>
-                        <SelectItem value="biweekly">Biweekly</SelectItem>
-                        <SelectItem value="monthly">Monthly</SelectItem>
-                        <SelectItem value="yearly">Yearly</SelectItem>
-                        <SelectItem value="custom">Custom</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                )}
-              />
-              <form.Field
-                name="recurrenceInterval"
-                children={(field) => (
-                  <div className="space-y-2">
-                    <Label htmlFor={field.name}>Interval</Label>
-                    <Input
-                      id={field.name}
-                      type="number"
-                      min="1"
-                      value={field.state.value}
-                      onChange={(e) => field.handleChange(e.target.value)}
-                      onBlur={field.handleBlur}
-                      disabled={!canManage}
-                    />
-                  </div>
-                )}
-              />
-              <form.Field
-                name="recurrenceEndDate"
-                children={(field) => (
-                  <div className="space-y-2">
-                    <Label htmlFor={field.name}>End date</Label>
-                    <DatePicker
-                      id={field.name}
-                      value={field.state.value}
-                      onChange={(value) => field.handleChange(value)}
-                      onBlur={field.handleBlur}
-                      disabled={!canManage}
-                    />
-                  </div>
-                )}
-              />
-              <form.Field
-                name="recurrenceDays"
-                children={(field) => (
-                  <div className="space-y-2 sm:col-span-2">
-                    <Label htmlFor={field.name}>Days of week</Label>
-                    <Input
-                      id={field.name}
-                      value={field.state.value}
-                      onChange={(e) => field.handleChange(e.target.value)}
-                      onBlur={field.handleBlur}
-                      disabled={!canManage}
-                      placeholder="monday, wednesday"
-                    />
-                  </div>
-                )}
-              />
+            <CardContent>
+              <ScheduleSection form={values} onChange={setField} disabled={!canManage} />
             </CardContent>
           </Card>
         </RecurrencePanel>
