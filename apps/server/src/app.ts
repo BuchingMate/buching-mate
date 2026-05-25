@@ -8,6 +8,7 @@ import { assetRoutes } from "./api/assets";
 import { attendeeRoutes } from "./api/attendees";
 import { broadcastRoutes } from "./api/broadcasts";
 import { eventRoutes } from "./api/events";
+import { geoRoutes } from "./api/geo";
 import { orgRoutes } from "./api/org";
 import { paymentRoutes } from "./api/payments";
 import { publicRoutes } from "./api/public";
@@ -64,6 +65,7 @@ export function createApp() {
   app.route("/api/assets", assetRoutes);
   app.route("/api/resources", resourceRoutes);
   app.route("/api/events", eventRoutes);
+  app.route("/api/geo", geoRoutes);
   app.route("/api/broadcasts", broadcastRoutes);
   app.route("/api/attendees", attendeeRoutes);
   app.route("/api/registrations", registrationRoutes);

@@ -4,6 +4,7 @@ import {
   bigint,
   boolean,
   customType,
+  doublePrecision,
   index,
   integer,
   jsonb,
@@ -41,6 +42,12 @@ export const polarSubscriptionStatus = pgEnum("polar_subscription_status", [
 ]);
 export const eventStatus = pgEnum("event_status", ["upcoming", "completed", "cancelled"]);
 export const eventVisibility = pgEnum("event_visibility", ["published", "unpublished"]);
+export const eventReviewStatus = pgEnum("events_review_status", [
+  "none",
+  "pending",
+  "approved",
+  "rejected",
+]);
 export const publicAssetKind = pgEnum("public_asset_kind", ["org_logo", "event_image"]);
 export const publicAssetStatus = pgEnum("public_asset_status", ["pending", "ready"]);
 export const registrationStatus = pgEnum("registration_status", [
@@ -185,11 +192,20 @@ export const events = pgTable(
     date: text("date").notNull(),
     time: time("time").notNull(),
     duration: integer("duration").notNull(),
+    endDate: text("end_date"),
+    endTime: time("end_time"),
+    timezone: text("timezone").notNull().default("UTC"),
     allDay: boolean("all_day").notNull().default(false),
     maxCapacity: integer("max_capacity"),
     location: text("location"),
+    locationLat: doublePrecision("location_lat"),
+    locationLng: doublePrecision("location_lng"),
     status: eventStatus("status").notNull().default("upcoming"),
     visibility: eventVisibility("visibility").notNull().default("unpublished"),
+    reviewerId: text("reviewer_id").references(() => user.id, { onDelete: "set null" }),
+    reviewStatus: eventReviewStatus("review_status").notNull().default("none"),
+    reviewNote: text("review_note"),
+    reviewedAt: timestamp("reviewed_at"),
     archivedAt: timestamp("archived_at"),
     recurring: boolean("recurring").notNull().default(false),
     recurrenceFrequency: text("recurrence_frequency"),

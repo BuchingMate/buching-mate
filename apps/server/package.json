@@ -10,6 +10,8 @@
     "preview": "NODE_ENV=production bun --env-file=../../.env dist/index.js",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "bun --env-file=../../.env src/db/migrate.ts",
+    "db:seed": "bun --env-file=../../.env src/db/seed.ts",
+    "db:seed:reset": "bun --env-file=../../.env src/db/seed.ts --reset",
     "db:studio": "drizzle-kit studio",
     "lint": "oxlint",
     "lint:fix": "oxlint --fix",
@@ -42,6 +44,7 @@
   "devDependencies": {
     "@types/bun": "^1.3.6",
     "drizzle-kit": "^0.30.0",
+    "drizzle-seed": "^0.3.1",
     "typescript": "^5.9.3"
   }
 }

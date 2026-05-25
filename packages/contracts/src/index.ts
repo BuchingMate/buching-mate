@@ -12,6 +12,7 @@ export type OrgPlan = "free" | "team" | "enterprise";
 export type ResourceType = "instructor" | "material" | "location" | "equipment" | "custom";
 export type EventStatus = "upcoming" | "completed" | "cancelled";
 export type EventVisibility = "published" | "unpublished";
+export type EventReviewStatus = "none" | "pending" | "approved" | "rejected";
 export type RegistrationStatus = "pending" | "confirmed" | "waitlisted" | "cancelled";
 export type PaymentStatus = "not_required" | "pending" | "paid" | "refunded" | "expired" | "failed";
 export type PublicAssetKind = "org_logo" | "event_image";
@@ -306,11 +307,20 @@ export interface EventDto {
   date: string;
   time: string;
   duration: number;
+  endDate: string | null;
+  endTime: string | null;
+  timezone: string;
   allDay: boolean;
   maxCapacity: number | null;
   location: string | null;
+  locationLat: number | null;
+  locationLng: number | null;
   status: EventStatus;
   visibility: EventVisibility;
+  reviewerId: string | null;
+  reviewStatus: EventReviewStatus;
+  reviewNote: string | null;
+  reviewedAt: string | null;
   archivedAt: string | null;
   recurring: boolean;
   recurrenceFrequency: string | null;
@@ -320,6 +330,7 @@ export interface EventDto {
   price: number;
   imageUrl: string | null;
   detailImages: EventImageDto[];
+  video?: EventVideoSummary | null;
   confirmedRegistrations: number;
   waitlistedRegistrations: number;
   createdAt: string;
@@ -329,6 +340,12 @@ export interface EventDto {
 export interface EventImageDto {
   id: string;
   url: string;
+}
+
+export interface EventVideoSummary {
+  provider: "zoom";
+  meetingId: string;
+  joinUrl: string;
 }
 
 export interface PublicAssetDto {
@@ -452,11 +469,18 @@ export interface CreateEventRequest {
   date: string;
   time: string;
   duration: number;
+  endDate?: string | null;
+  endTime?: string | null;
+  timezone?: string;
   allDay?: boolean;
   maxCapacity?: number | null;
   location?: string | null;
+  locationLat?: number | null;
+  locationLng?: number | null;
   status?: EventStatus;
   visibility?: EventVisibility;
+  reviewerId?: string | null;
+  videoProvider?: "zoom" | null;
   recurring?: boolean;
   recurrenceFrequency?: string | null;
   recurrenceDays?: string[];

@@ -92,6 +92,7 @@ const WEB_PORT = Bun.env.WEB_PORT ?? "5678";
 
 export const SERVER_URL = Bun.env.SERVER_URL ?? `http://localhost:${SERVER_PORT}`;
 export const WEB_URL = Bun.env.WEB_URL ?? `http://localhost:${WEB_PORT}`;
+export const GOOGLE_MAPS_API_KEY = Bun.env.GOOGLE_MAPS_API_KEY ?? "";
 export const PUBLIC_SITE_URL = Bun.env.PUBLIC_SITE_URL ?? WEB_URL;
 export const BETTER_AUTH_URL = SERVER_URL;
 

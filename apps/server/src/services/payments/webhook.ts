@@ -10,6 +10,7 @@ import {
   webhookEvents,
 } from "../../db/schema";
 import { getLogger } from "../../observability/request-context";
+import { eventStartUtc, eventEndUtc } from "../../lib/event-time";
 import { getAdapter, isAdapterAvailable } from "../../payments/registry";
 import { InvalidSignatureError, type NormalizedPaymentEvent } from "../../payments/adapter";
 import { sendBookingConfirmationEmail } from "../registrations/email";
@@ -181,6 +182,9 @@ async function markPaid(
       orgId: registrations.orgId,
       eventId: registrations.eventId,
       duration: eventsTable.duration,
+      endDate: eventsTable.endDate,
+      endTime: eventsTable.endTime,
+      timezone: eventsTable.timezone,
       description: eventsTable.description,
     })
     .from(registrations)
@@ -203,10 +207,11 @@ async function markPaid(
     const video = await getEventVideo(details.orgId, details.eventId);
     joinUrl = video?.joinUrl ?? null;
   }
-  const hhmm = details.eventTime.length >= 5 ? details.eventTime.slice(0, 5) : "00:00";
-  const startUtc = new Date(`${details.eventDate}T${hhmm}:00Z`);
-  const endUtc = new Date(startUtc.getTime() + Math.max(1, details.duration) * 60_000);
-  const { duration: _d, ...emailFields } = details;
+  const startUtc = eventStartUtc(details.eventDate, details.eventTime, details.timezone);
+  const endUtc =
+    eventEndUtc(details.endDate, details.endTime, details.timezone) ??
+    new Date(startUtc.getTime() + Math.max(1, details.duration) * 60_000);
+  const { duration: _d, endDate: _ed, endTime: _et, timezone: _tz, ...emailFields } = details;
   return {
     ...emailFields,
     registrationId: registration.id,

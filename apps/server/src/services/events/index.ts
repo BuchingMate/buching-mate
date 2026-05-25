@@ -7,13 +7,34 @@ import type {
 } from "@workspace/contracts";
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { db } from "../../db";
-import { eventResources, events, publicAssets, resources, registrations } from "../../db/schema";
+import {
+  eventResources,
+  events,
+  publicAssets,
+  resources,
+  registrations,
+  user,
+} from "../../db/schema";
+import { member } from "../../db/auth-schema";
+import { WEB_URL } from "../../env";
+import {
+  sendEventReviewApprovedEmail,
+  sendEventReviewRejectedEmail,
+  sendEventReviewRequestedEmail,
+} from "./email";
 import { rewritePublicAssetUrl } from "../assets/public-url";
+import {
+  durationMinutes,
+  eventEndUtc,
+  eventStartUtc,
+  utcToZonedWallClock,
+} from "../../lib/event-time";
 import { incrementUsage } from "../subscription-usage";
 import { getLogger } from "../../observability/request-context";
 import {
   attachZoomMeetingToEvent,
   detachZoomMeetingFromEvent,
+  getEventVideo,
   markConnectionError,
   markConnectionHealthy,
   syncZoomMeetingForEvent,
@@ -22,6 +43,73 @@ import {
 function errMessage(err: unknown): string {
   if (err instanceof Error) return err.message;
   return String(err);
+}
+
+// Thrown by updateEvent when publishing is blocked pending an assigned review.
+export class EventReviewRequiredError extends Error {
+  constructor() {
+    super("This event must be approved by its reviewer before it can be published");
+    this.name = "EventReviewRequiredError";
+  }
+}
+
+export class EventReviewerInvalidError extends Error {
+  constructor() {
+    super("Reviewer must be a member of this organization");
+    this.name = "EventReviewerInvalidError";
+  }
+}
+
+async function ensureOrgReviewer(orgId: string, reviewerId: string | null | undefined) {
+  if (!reviewerId) return;
+  const rows = await db
+    .select({ id: member.id })
+    .from(member)
+    .where(and(eq(member.organizationId, orgId), eq(member.userId, reviewerId)))
+    .limit(1);
+  if (!rows[0]) throw new EventReviewerInvalidError();
+}
+
+async function getUserContact(userId: string): Promise<{ email: string; name: string } | null> {
+  const rows = await db
+    .select({ email: user.email, name: user.name })
+    .from(user)
+    .where(eq(user.id, userId))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
+function adminEventUrl(eventId: string): string {
+  return `${WEB_URL}/admin/events/${eventId}`;
+}
+
+async function notifyReviewer(
+  eventId: string,
+  reviewerId: string,
+  submitterId: string | null,
+  eventTitle: string,
+) {
+  try {
+    const reviewer = await getUserContact(reviewerId);
+    if (!reviewer) return;
+    const submitter = submitterId ? await getUserContact(submitterId) : null;
+    const orgRow = await db
+      .select({ orgId: events.orgId })
+      .from(events)
+      .where(eq(events.id, eventId))
+      .limit(1);
+    if (!orgRow[0]) return;
+    await sendEventReviewRequestedEmail({
+      orgId: orgRow[0].orgId,
+      to: reviewer.email,
+      reviewerName: reviewer.name,
+      submitterName: submitter?.name ?? "A teammate",
+      eventTitle,
+      eventUrl: adminEventUrl(eventId),
+    });
+  } catch (err) {
+    getLogger().warn({ err, eventId }, "events.review.notifyFailed");
+  }
 }
 
 async function safeAttachZoom(orgId: string, eventId: string) {
@@ -63,9 +151,26 @@ async function safeDetachZoom(orgId: string, eventId: string) {
   }
 }
 
-function combineDateTimeUtc(date: string, time: string): Date {
-  const hhmm = time.length >= 5 ? time.slice(0, 5) : "00:00";
-  return new Date(`${date}T${hhmm}:00Z`);
+// Keep `duration` and the explicit end consistent. If a valid explicit end is
+// given it wins (duration is derived from it); otherwise end is derived from
+// duration. Returns both so every write persists a consistent pair.
+function reconcileSchedule(s: {
+  date: string;
+  time: string;
+  duration: number;
+  endDate: string | null;
+  endTime: string | null;
+  timezone: string;
+}): { duration: number; endDate: string; endTime: string } {
+  const startUtc = eventStartUtc(s.date, s.time, s.timezone);
+  const endUtc = eventEndUtc(s.endDate, s.endTime, s.timezone);
+  if (endUtc && endUtc.getTime() > startUtc.getTime()) {
+    const wc = utcToZonedWallClock(endUtc, s.timezone);
+    return { duration: durationMinutes(startUtc, endUtc), endDate: wc.date, endTime: wc.time };
+  }
+  const derivedEnd = new Date(startUtc.getTime() + Math.max(1, s.duration) * 60_000);
+  const wc = utcToZonedWallClock(derivedEnd, s.timezone);
+  return { duration: Math.max(1, s.duration), endDate: wc.date, endTime: wc.time };
 }
 
 export function toEventDto(
@@ -86,11 +191,20 @@ export function toEventDto(
     date: event.date,
     time: event.time,
     duration: event.duration,
+    endDate: event.endDate,
+    endTime: event.endTime,
+    timezone: event.timezone,
     allDay: event.allDay,
     maxCapacity: event.maxCapacity,
     location: event.location,
+    locationLat: event.locationLat,
+    locationLng: event.locationLng,
     status: event.status,
     visibility: event.visibility,
+    reviewerId: event.reviewerId,
+    reviewStatus: event.reviewStatus,
+    reviewNote: event.reviewNote,
+    reviewedAt: event.reviewedAt?.toISOString() ?? null,
     archivedAt: event.archivedAt?.toISOString() ?? null,
     recurring: event.recurring,
     recurrenceFrequency: event.recurrenceFrequency,
@@ -104,6 +218,17 @@ export function toEventDto(
     waitlistedRegistrations: waitlistedCount,
     createdAt: event.createdAt.toISOString(),
     updatedAt: event.updatedAt.toISOString(),
+  };
+}
+
+function withVideo(dto: EventDto, video: Awaited<ReturnType<typeof getEventVideo>>): EventDto {
+  return {
+    ...dto,
+    video: video && {
+      provider: video.provider,
+      meetingId: video.meetingId,
+      joinUrl: video.joinUrl,
+    },
   };
 }
 
@@ -201,7 +326,8 @@ export async function getEvent(orgId: string, eventId: string): Promise<EventDto
   const waitlisted = counts.find((c) => c.status === "waitlisted")?.count ?? 0;
 
   const detailImages = await listEventDetailImages(orgId, eventId);
-  return toEventDto(rows[0], confirmed, waitlisted, detailImages);
+  const video = await getEventVideo(orgId, eventId);
+  return withVideo(toEventDto(rows[0], confirmed, waitlisted, detailImages), video);
 }
 
 export async function createEvent(
@@ -209,6 +335,21 @@ export async function createEvent(
   createdById: string,
   input: CreateEventRequest,
 ): Promise<EventDto> {
+  await ensureOrgReviewer(orgId, input.reviewerId);
+  if (input.visibility === "published" && input.reviewerId) {
+    throw new EventReviewRequiredError();
+  }
+
+  const timezone = input.timezone ?? "UTC";
+  const schedule = reconcileSchedule({
+    date: input.date,
+    time: input.time,
+    duration: input.duration,
+    endDate: input.endDate ?? null,
+    endTime: input.endTime ?? null,
+    timezone,
+  });
+
   const rows = await db.transaction(async (tx) => {
     const inserted = await tx
       .insert(events)
@@ -222,12 +363,19 @@ export async function createEvent(
         tags: input.tags ?? [],
         date: input.date,
         time: input.time,
-        duration: input.duration,
+        duration: schedule.duration,
+        endDate: schedule.endDate,
+        endTime: schedule.endTime,
+        timezone,
         allDay: input.allDay ?? false,
         maxCapacity: input.maxCapacity ?? null,
         location: input.location ?? null,
+        locationLat: input.locationLat ?? null,
+        locationLng: input.locationLng ?? null,
         status: input.status ?? "upcoming",
         visibility: input.visibility ?? "unpublished",
+        reviewerId: input.reviewerId ?? null,
+        reviewStatus: input.reviewerId ? "pending" : "none",
         recurring: input.recurring ?? false,
         recurrenceFrequency: input.recurrenceFrequency ?? null,
         recurrenceDays: input.recurrenceDays ?? [],
@@ -241,11 +389,18 @@ export async function createEvent(
     return inserted;
   });
 
-  if (rows[0].visibility === "published" && rows[0].status !== "cancelled") {
+  // videoProvider is authoritative: a Zoom meeting exists only when the creator
+  // chose Zoom as the (virtual) location — regardless of publish state.
+  if (input.videoProvider === "zoom" && rows[0].status !== "cancelled") {
     await safeAttachZoom(orgId, rows[0].id);
   }
 
-  return toEventDto(rows[0], 0, 0);
+  if (rows[0].reviewerId && rows[0].reviewStatus === "pending") {
+    await notifyReviewer(rows[0].id, rows[0].reviewerId, createdById, rows[0].title);
+  }
+
+  const video = await getEventVideo(orgId, rows[0].id);
+  return withVideo(toEventDto(rows[0], 0, 0), video);
 }
 
 export async function updateEvent(
@@ -260,10 +415,69 @@ export async function updateEvent(
     .limit(1);
   const prev = before[0];
 
-  const { archivedAt, ...eventInput } = input;
+  // videoProvider is not an events column — it drives Zoom attach/detach below.
+  const { archivedAt, videoProvider, ...eventInput } = input;
+  await ensureOrgReviewer(orgId, eventInput.reviewerId);
   const patch: Partial<typeof events.$inferInsert> = { ...eventInput, updatedAt: new Date() };
   if (archivedAt !== undefined) {
     patch.archivedAt = archivedAt === null ? null : new Date(archivedAt);
+  }
+
+  // Keep duration and explicit end consistent. Explicit end (if sent) wins;
+  // otherwise a duration/date/time/timezone change re-derives the end.
+  if (prev) {
+    const endProvided = eventInput.endDate !== undefined || eventInput.endTime !== undefined;
+    const scheduleChanged =
+      endProvided ||
+      eventInput.duration !== undefined ||
+      eventInput.date !== undefined ||
+      eventInput.time !== undefined ||
+      eventInput.timezone !== undefined;
+    if (scheduleChanged) {
+      const timezone = eventInput.timezone ?? prev.timezone;
+      const date = eventInput.date ?? prev.date;
+      const time = eventInput.time ?? prev.time;
+      const schedule = endProvided
+        ? reconcileSchedule({
+            date,
+            time,
+            duration: prev.duration,
+            endDate: eventInput.endDate !== undefined ? eventInput.endDate : prev.endDate,
+            endTime: eventInput.endTime !== undefined ? eventInput.endTime : prev.endTime,
+            timezone,
+          })
+        : reconcileSchedule({
+            date,
+            time,
+            duration: eventInput.duration ?? prev.duration,
+            endDate: null,
+            endTime: null,
+            timezone,
+          });
+      patch.duration = schedule.duration;
+      patch.endDate = schedule.endDate;
+      patch.endTime = schedule.endTime;
+    }
+  }
+
+  // Review: reassigning a reviewer (re)starts review; clearing it removes the gate.
+  let notifyNewReviewer: string | null = null;
+  if (prev && eventInput.reviewerId !== undefined && eventInput.reviewerId !== prev.reviewerId) {
+    patch.reviewStatus = eventInput.reviewerId ? "pending" : "none";
+    patch.reviewNote = null;
+    patch.reviewedAt = null;
+    notifyNewReviewer = eventInput.reviewerId;
+  }
+
+  // Publish gate: an event with an assigned reviewer can't be published until approved.
+  if (prev) {
+    const nextReviewerId =
+      eventInput.reviewerId !== undefined ? eventInput.reviewerId : prev.reviewerId;
+    const nextReviewStatus = (patch.reviewStatus as typeof prev.reviewStatus) ?? prev.reviewStatus;
+    const nextVisibility = eventInput.visibility ?? prev.visibility;
+    if (nextVisibility === "published" && nextReviewerId && nextReviewStatus !== "approved") {
+      throw new EventReviewRequiredError();
+    }
   }
 
   const rows = await db
@@ -273,22 +487,31 @@ export async function updateEvent(
     .returning();
 
   if (!rows[0]) return null;
+  if (notifyNewReviewer && rows[0].reviewStatus === "pending") {
+    await notifyReviewer(rows[0].id, notifyNewReviewer, rows[0].createdById, rows[0].title);
+  }
 
   const next = rows[0];
   if (prev) {
-    const wasLive = prev.visibility === "published" && prev.status !== "cancelled";
-    const isLive = next.visibility === "published" && next.status !== "cancelled";
-    if (!wasLive && isLive) {
+    const currentVideo = await getEventVideo(orgId, next.id);
+    const hasVideo = currentVideo != null;
+    // videoProvider is authoritative when sent; otherwise leave the meeting as-is.
+    // A cancelled event never keeps a meeting.
+    const wantsZoom =
+      next.status !== "cancelled" &&
+      (videoProvider !== undefined ? videoProvider === "zoom" : hasVideo);
+
+    if (wantsZoom && !hasVideo) {
       await safeAttachZoom(orgId, next.id);
-    } else if (wasLive && !isLive) {
+    } else if (!wantsZoom && hasVideo) {
       await safeDetachZoom(orgId, next.id);
-    } else if (isLive) {
+    } else if (wantsZoom && hasVideo) {
       const videoPatch: Parameters<typeof safeSyncZoom>[2] = {};
       if (prev.title !== next.title) videoPatch.topic = next.title;
       if (prev.duration !== next.duration) videoPatch.durationMinutes = next.duration;
       if (prev.description !== next.description) videoPatch.agenda = next.description ?? null;
-      if (prev.date !== next.date || prev.time !== next.time) {
-        videoPatch.startUtc = combineDateTimeUtc(next.date, next.time);
+      if (prev.date !== next.date || prev.time !== next.time || prev.timezone !== next.timezone) {
+        videoPatch.startUtc = eventStartUtc(next.date, next.time, next.timezone);
       }
       const recurrenceChanged =
         prev.recurring !== next.recurring ||
@@ -321,7 +544,8 @@ export async function updateEvent(
   const waitlisted = counts.find((c) => c.status === "waitlisted")?.count ?? 0;
 
   const detailImages = await listEventDetailImages(orgId, eventId);
-  return toEventDto(rows[0], confirmed, waitlisted, detailImages);
+  const video = await getEventVideo(orgId, eventId);
+  return withVideo(toEventDto(rows[0], confirmed, waitlisted, detailImages), video);
 }
 
 export async function deleteEvent(orgId: string, eventId: string): Promise<boolean> {
@@ -351,9 +575,14 @@ export async function duplicateEvent(
     date: source.date,
     time: source.time,
     duration: source.duration,
+    endDate: source.endDate,
+    endTime: source.endTime,
+    timezone: source.timezone,
     allDay: source.allDay,
     maxCapacity: source.maxCapacity,
     location: source.location,
+    locationLat: source.locationLat,
+    locationLng: source.locationLng,
     status: source.status,
     visibility: "unpublished",
     recurring: source.recurring,
@@ -364,6 +593,121 @@ export async function duplicateEvent(
     price: source.price,
     imageUrl: source.imageUrl,
   });
+}
+
+function canReview(actorRole: string, actorUserId: string, reviewerId: string | null): boolean {
+  return actorRole === "owner" || actorRole === "admin" || actorUserId === reviewerId;
+}
+
+async function loadEventRow(orgId: string, eventId: string) {
+  const rows = await db
+    .select()
+    .from(events)
+    .where(and(eq(events.orgId, orgId), eq(events.id, eventId)))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
+/** Assign (or re-assign) a reviewer and put the event into pending review. */
+export async function submitForReview(
+  orgId: string,
+  eventId: string,
+  reviewerId: string,
+  submitterId: string,
+): Promise<EventDto | null> {
+  await ensureOrgReviewer(orgId, reviewerId);
+  const rows = await db
+    .update(events)
+    .set({
+      reviewerId,
+      reviewStatus: "pending",
+      reviewNote: null,
+      reviewedAt: null,
+      updatedAt: new Date(),
+    })
+    .where(and(eq(events.orgId, orgId), eq(events.id, eventId)))
+    .returning();
+  if (!rows[0]) return null;
+  await notifyReviewer(eventId, reviewerId, submitterId, rows[0].title);
+  return getEvent(orgId, eventId);
+}
+
+export async function approveEvent(
+  orgId: string,
+  eventId: string,
+  actorUserId: string,
+  actorRole: string,
+): Promise<EventDto | "forbidden" | null> {
+  const ev = await loadEventRow(orgId, eventId);
+  if (!ev) return null;
+  if (!canReview(actorRole, actorUserId, ev.reviewerId)) return "forbidden";
+  await db
+    .update(events)
+    .set({
+      reviewStatus: "approved",
+      reviewedAt: new Date(),
+      reviewNote: null,
+      updatedAt: new Date(),
+    })
+    .where(and(eq(events.orgId, orgId), eq(events.id, eventId)));
+  if (ev.createdById) {
+    try {
+      const creator = await getUserContact(ev.createdById);
+      const reviewer = await getUserContact(actorUserId);
+      if (creator) {
+        await sendEventReviewApprovedEmail({
+          orgId,
+          to: creator.email,
+          reviewerName: reviewer?.name ?? "Your reviewer",
+          eventTitle: ev.title,
+          eventUrl: adminEventUrl(eventId),
+        });
+      }
+    } catch (err) {
+      getLogger().warn({ err, eventId }, "events.review.approveNotifyFailed");
+    }
+  }
+  return getEvent(orgId, eventId);
+}
+
+export async function rejectEvent(
+  orgId: string,
+  eventId: string,
+  actorUserId: string,
+  actorRole: string,
+  note: string | null,
+): Promise<EventDto | "forbidden" | null> {
+  const ev = await loadEventRow(orgId, eventId);
+  if (!ev) return null;
+  if (!canReview(actorRole, actorUserId, ev.reviewerId)) return "forbidden";
+  await db
+    .update(events)
+    .set({
+      reviewStatus: "rejected",
+      reviewNote: note,
+      reviewedAt: new Date(),
+      updatedAt: new Date(),
+    })
+    .where(and(eq(events.orgId, orgId), eq(events.id, eventId)));
+  if (ev.createdById) {
+    try {
+      const creator = await getUserContact(ev.createdById);
+      const reviewer = await getUserContact(actorUserId);
+      if (creator) {
+        await sendEventReviewRejectedEmail({
+          orgId,
+          to: creator.email,
+          reviewerName: reviewer?.name ?? "Your reviewer",
+          eventTitle: ev.title,
+          note,
+          eventUrl: adminEventUrl(eventId),
+        });
+      }
+    } catch (err) {
+      getLogger().warn({ err, eventId }, "events.review.rejectNotifyFailed");
+    }
+  }
+  return getEvent(orgId, eventId);
 }
 
 export async function listEventResources(
