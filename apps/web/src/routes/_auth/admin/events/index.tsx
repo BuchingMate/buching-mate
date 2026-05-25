@@ -1,18 +1,16 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { toast } from "sonner";
-import { useMutation, useQuery, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
+import { useMutation, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
 import { DragDropProvider, useDraggable, useDroppable } from "@dnd-kit/react";
 import { useEffect, useMemo, useState } from "react";
 import { Calendar, LayoutGrid, List, Lock, Search, SlidersHorizontal } from "lucide-react";
 import type { EventDto, EventStatus, EventVisibility } from "@workspace/contracts";
 import { AppShell } from "@/components/app-shell";
-import { ApiError } from "@/lib/api";
 import { pageHead } from "@/lib/seo";
 import { EmptyState } from "@/components/empty-state";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -24,29 +22,19 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  defaultEventForm,
-  formToEventRequest,
-  updateEvent,
-  type EventFormState,
-} from "@/lib/events";
+import { updateEvent } from "@/lib/events";
 import { getCurrentOrg } from "@/lib/org";
 import { canManageEvents } from "@/lib/permissions";
 import { formatPrice } from "@/lib/public";
 import { eventKeys, eventsQueryOptions } from "@/queries/events";
-import { useCreateEvent, useDuplicateEvent } from "@/hooks/use-events";
+import { useDuplicateEvent } from "@/hooks/use-events";
 import { useOrgCurrency } from "@/hooks/use-org";
-import { resourcesQueryOptions } from "@/queries/resources";
-import { uploadPublicAsset } from "@/lib/assets";
-import { replaceEventResources } from "@/lib/resources";
 import { StatusBadge, VisibilityBadge } from "./~components/event-badges";
 import { FilterChip } from "./~components/filter-chip";
 import { EventsTable, type SortKey } from "./~components/events-table";
-import { EventForm } from "./~components/event-form";
 
 type ViewMode = "list" | "kanban";
 type EventSegment = "active" | "archived";
-type ResourceAssignmentDraft = { resourceId: string; role: string; quantity: number };
 
 const statusLabels: Record<EventStatus, string> = {
   upcoming: "Upcoming",
@@ -97,26 +85,14 @@ function Events() {
   const [visibility, setVisibility] = useState("all");
   const [sortKey, setSortKey] = useState<SortKey>("date");
   const [page, setPage] = useState(1);
-  const [createOpen, setCreateOpen] = useState(false);
-  const [form, setForm] = useState<EventFormState>(() => defaultEventForm());
-  const [coverFile, setCoverFile] = useState<File | null>(null);
-  const [detailFiles, setDetailFiles] = useState<File[]>([]);
-  const [resourceAssignments, setResourceAssignments] = useState<ResourceAssignmentDraft[]>([]);
   const [error, setError] = useState("");
   const [filterOpen, setFilterOpen] = useState(false);
-  const queryClient = useQueryClient();
 
   const {
     data: { events },
   } = useSuspenseQuery(eventsQueryOptions);
 
-  const createMutation = useCreateEvent();
-  const currency = useOrgCurrency();
   const duplicateMutation = useDuplicateEvent();
-  const { data: resourcesData } = useQuery({
-    ...resourcesQueryOptions({ includeArchived: true }),
-    enabled: createOpen,
-  });
 
   const categories = useMemo(
     () => [...new Set(events.map((event) => event.category).filter(Boolean))] as string[],
@@ -184,78 +160,6 @@ function Events() {
     });
   };
 
-  const updateForm = (field: keyof EventFormState, value: string) => {
-    setForm((current) => ({ ...current, [field]: value }));
-  };
-
-  const handleCreate = async (event: React.FormEvent) => {
-    event.preventDefault();
-    setError("");
-
-    try {
-      const { event: createdEvent } = await createMutation.mutateAsync(
-        formToEventRequest(form, currency),
-      );
-      const assignments = resourceAssignments.filter(
-        (assignment) => assignment.resourceId && assignment.role.trim(),
-      );
-      if (assignments.length > 0) {
-        await replaceEventResources(createdEvent.id, {
-          resources: assignments.map((assignment) => ({
-            resourceId: assignment.resourceId,
-            role: assignment.role.trim(),
-            quantity: assignment.quantity > 0 ? assignment.quantity : 1,
-          })),
-        });
-      }
-      const uploadErrors: string[] = [];
-      if (coverFile) {
-        try {
-          await uploadPublicAsset({
-            file: coverFile,
-            kind: "event_image",
-            role: "cover",
-            eventId: createdEvent.id,
-          });
-        } catch (error) {
-          uploadErrors.push(
-            error instanceof Error ? error.message : "Unable to upload cover image",
-          );
-        }
-      }
-      for (const file of detailFiles) {
-        try {
-          await uploadPublicAsset({
-            file,
-            kind: "event_image",
-            role: "detail",
-            eventId: createdEvent.id,
-          });
-        } catch (error) {
-          uploadErrors.push(
-            error instanceof Error ? error.message : `Unable to upload ${file.name}`,
-          );
-        }
-      }
-      queryClient.invalidateQueries({ queryKey: eventKeys.lists() });
-      setForm(defaultEventForm());
-      setCoverFile(null);
-      setDetailFiles([]);
-      setResourceAssignments([]);
-      setCreateOpen(false);
-      if (uploadErrors.length > 0) {
-        setError(`Event created, but some images failed to upload: ${uploadErrors.join(", ")}`);
-      }
-    } catch (error) {
-      if (error instanceof ApiError && error.code === "event_cap_exceeded") {
-        setCreateOpen(false);
-        showUpgradeToast();
-        return;
-      }
-      setError(error instanceof Error ? error.message : "Unable to create event");
-    }
-  };
-
   const handleDuplicate = (eventId: string) => {
     setError("");
     duplicateMutation.mutate(eventId, {
@@ -282,41 +186,24 @@ function Events() {
       title="Events"
       description="Create, filter, sort, and schedule event work."
       headerActions={
-        <Button
-          size="sm"
-          disabled={!canManage}
-          variant={atCap ? "outline" : "default"}
-          onClick={() => (atCap ? showUpgradeToast() : setCreateOpen(true))}
-        >
-          {atCap ? <Lock className="size-3.5" /> : null}
-          New event
-        </Button>
+        atCap ? (
+          <Button size="sm" disabled={!canManage} variant="outline" onClick={showUpgradeToast}>
+            <Lock className="size-3.5" />
+            New event
+          </Button>
+        ) : (
+          <Button
+            size="sm"
+            disabled={!canManage}
+            nativeButton={false}
+            render={<Link to="/admin/events/new" />}
+          >
+            New event
+          </Button>
+        )
       }
     >
       <div className="mx-auto max-w-5xl space-y-6">
-        <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-          <DialogContent className="max-h-[90svh] overflow-y-auto sm:max-w-3xl lg:max-w-4xl">
-            <DialogHeader>
-              <DialogTitle>Create event</DialogTitle>
-            </DialogHeader>
-            <EventForm
-              key={createOpen ? "open" : "closed"}
-              form={form}
-              onChange={updateForm}
-              onSubmit={handleCreate}
-              submitLabel={createMutation.isPending ? "Creating..." : "Create event"}
-              disabled={createMutation.isPending}
-              resources={resourcesData?.resources ?? []}
-              resourceAssignments={resourceAssignments}
-              onResourceAssignmentsChange={setResourceAssignments}
-              coverFile={coverFile}
-              detailFiles={detailFiles}
-              onCoverFileChange={setCoverFile}
-              onDetailFilesChange={setDetailFiles}
-            />
-          </DialogContent>
-        </Dialog>
-
         {error && (
           <Alert variant="destructive">
             <AlertDescription>{error}</AlertDescription>

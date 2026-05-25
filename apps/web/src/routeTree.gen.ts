@@ -31,6 +31,7 @@ import { Route as AuthAdminEventsIndexRouteImport } from './routes/_auth/admin/e
 import { Route as AuthAdminBroadcastsIndexRouteImport } from './routes/_auth/admin/broadcasts/index'
 import { Route as AuthAdminAttendeesIndexRouteImport } from './routes/_auth/admin/attendees/index'
 import { Route as AuthAdminResourcesResourceIdRouteImport } from './routes/_auth/admin/resources/$resourceId'
+import { Route as AuthAdminEventsNewRouteImport } from './routes/_auth/admin/events/new'
 import { Route as AuthAdminAttendeesAttendeeIdRouteImport } from './routes/_auth/admin/attendees/$attendeeId'
 import { Route as AuthAdminOrgSlugSettingsRouteImport } from './routes/_auth/admin/$orgSlug.settings'
 import { Route as AuthAdminEventsEventIdIndexRouteImport } from './routes/_auth/admin/events/$eventId/index'
@@ -147,6 +148,11 @@ const AuthAdminResourcesResourceIdRoute =
     path: '/resources/$resourceId',
     getParentRoute: () => AuthAdminRoute,
   } as any)
+const AuthAdminEventsNewRoute = AuthAdminEventsNewRouteImport.update({
+  id: '/events/new',
+  path: '/events/new',
+  getParentRoute: () => AuthAdminRoute,
+} as any)
 const AuthAdminAttendeesAttendeeIdRoute =
   AuthAdminAttendeesAttendeeIdRouteImport.update({
     id: '/attendees/$attendeeId',
@@ -196,6 +202,7 @@ export interface FileRoutesByFullPath {
   '/events/$eventId/': typeof EventsEventIdIndexRoute
   '/admin/$orgSlug/settings': typeof AuthAdminOrgSlugSettingsRoute
   '/admin/attendees/$attendeeId': typeof AuthAdminAttendeesAttendeeIdRoute
+  '/admin/events/new': typeof AuthAdminEventsNewRoute
   '/admin/resources/$resourceId': typeof AuthAdminResourcesResourceIdRoute
   '/admin/attendees/': typeof AuthAdminAttendeesIndexRoute
   '/admin/broadcasts/': typeof AuthAdminBroadcastsIndexRoute
@@ -222,6 +229,7 @@ export interface FileRoutesByTo {
   '/events/$eventId': typeof EventsEventIdIndexRoute
   '/admin/$orgSlug/settings': typeof AuthAdminOrgSlugSettingsRoute
   '/admin/attendees/$attendeeId': typeof AuthAdminAttendeesAttendeeIdRoute
+  '/admin/events/new': typeof AuthAdminEventsNewRoute
   '/admin/resources/$resourceId': typeof AuthAdminResourcesResourceIdRoute
   '/admin/attendees': typeof AuthAdminAttendeesIndexRoute
   '/admin/broadcasts': typeof AuthAdminBroadcastsIndexRoute
@@ -252,6 +260,7 @@ export interface FileRoutesById {
   '/events/$eventId/': typeof EventsEventIdIndexRoute
   '/_auth/admin/$orgSlug/settings': typeof AuthAdminOrgSlugSettingsRoute
   '/_auth/admin/attendees/$attendeeId': typeof AuthAdminAttendeesAttendeeIdRoute
+  '/_auth/admin/events/new': typeof AuthAdminEventsNewRoute
   '/_auth/admin/resources/$resourceId': typeof AuthAdminResourcesResourceIdRoute
   '/_auth/admin/attendees/': typeof AuthAdminAttendeesIndexRoute
   '/_auth/admin/broadcasts/': typeof AuthAdminBroadcastsIndexRoute
@@ -281,6 +290,7 @@ export interface FileRouteTypes {
     | '/events/$eventId/'
     | '/admin/$orgSlug/settings'
     | '/admin/attendees/$attendeeId'
+    | '/admin/events/new'
     | '/admin/resources/$resourceId'
     | '/admin/attendees/'
     | '/admin/broadcasts/'
@@ -307,6 +317,7 @@ export interface FileRouteTypes {
     | '/events/$eventId'
     | '/admin/$orgSlug/settings'
     | '/admin/attendees/$attendeeId'
+    | '/admin/events/new'
     | '/admin/resources/$resourceId'
     | '/admin/attendees'
     | '/admin/broadcasts'
@@ -336,6 +347,7 @@ export interface FileRouteTypes {
     | '/events/$eventId/'
     | '/_auth/admin/$orgSlug/settings'
     | '/_auth/admin/attendees/$attendeeId'
+    | '/_auth/admin/events/new'
     | '/_auth/admin/resources/$resourceId'
     | '/_auth/admin/attendees/'
     | '/_auth/admin/broadcasts/'
@@ -516,6 +528,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthAdminResourcesResourceIdRouteImport
       parentRoute: typeof AuthAdminRoute
     }
+    '/_auth/admin/events/new': {
+      id: '/_auth/admin/events/new'
+      path: '/events/new'
+      fullPath: '/admin/events/new'
+      preLoaderRoute: typeof AuthAdminEventsNewRouteImport
+      parentRoute: typeof AuthAdminRoute
+    }
     '/_auth/admin/attendees/$attendeeId': {
       id: '/_auth/admin/attendees/$attendeeId'
       path: '/attendees/$attendeeId'
@@ -571,6 +590,7 @@ interface AuthAdminRouteChildren {
   AuthAdminIndexRoute: typeof AuthAdminIndexRoute
   AuthAdminOrgSlugSettingsRoute: typeof AuthAdminOrgSlugSettingsRoute
   AuthAdminAttendeesAttendeeIdRoute: typeof AuthAdminAttendeesAttendeeIdRoute
+  AuthAdminEventsNewRoute: typeof AuthAdminEventsNewRoute
   AuthAdminResourcesResourceIdRoute: typeof AuthAdminResourcesResourceIdRoute
   AuthAdminAttendeesIndexRoute: typeof AuthAdminAttendeesIndexRoute
   AuthAdminBroadcastsIndexRoute: typeof AuthAdminBroadcastsIndexRoute
@@ -586,6 +606,7 @@ const AuthAdminRouteChildren: AuthAdminRouteChildren = {
   AuthAdminIndexRoute: AuthAdminIndexRoute,
   AuthAdminOrgSlugSettingsRoute: AuthAdminOrgSlugSettingsRoute,
   AuthAdminAttendeesAttendeeIdRoute: AuthAdminAttendeesAttendeeIdRoute,
+  AuthAdminEventsNewRoute: AuthAdminEventsNewRoute,
   AuthAdminResourcesResourceIdRoute: AuthAdminResourcesResourceIdRoute,
   AuthAdminAttendeesIndexRoute: AuthAdminAttendeesIndexRoute,
   AuthAdminBroadcastsIndexRoute: AuthAdminBroadcastsIndexRoute,
