@@ -1,6 +1,7 @@
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
-import { organization } from "better-auth/plugins";
+import { organization, twoFactor } from "better-auth/plugins";
+import { passkey } from "@better-auth/passkey";
 import { polar, checkout, portal, webhooks } from "@polar-sh/better-auth";
 import { Polar } from "@polar-sh/sdk";
 import { eq } from "drizzle-orm";
@@ -36,6 +37,13 @@ function isEmailDomainAllowed(email: string): boolean {
   const domain = email.split("@")[1]?.toLowerCase();
   if (!domain) return false;
   return allowedEmailDomains.includes(domain);
+}
+
+function passkeyRpId() {
+  if (Bun.env.PASSKEY_RP_ID) return Bun.env.PASSKEY_RP_ID;
+  const hostname = new URL(WEB_URL).hostname;
+  if (hostname.endsWith(".lvh.me")) return "lvh.me";
+  return hostname;
 }
 
 const googleProvider =
@@ -132,11 +140,22 @@ const polarPlugin = polarClient
     })
   : null;
 
+const authPlugins = [
+  organizationPlugin,
+  twoFactor(),
+  passkey({
+    rpID: passkeyRpId(),
+    rpName: Bun.env.VITE_BUSINESS_NAME ?? Bun.env.BUSINESS_NAME ?? "BuchingMate",
+  }),
+  ...(polarPlugin ? [polarPlugin] : []),
+];
+
 export const auth = betterAuth({
   database: drizzleAdapter(db, {
     provider: "pg",
     schema,
   }),
+  appName: Bun.env.VITE_BUSINESS_NAME ?? Bun.env.BUSINESS_NAME ?? "BuchingMate",
   secret: process.env.BETTER_AUTH_SECRET,
   baseURL: BETTER_AUTH_URL,
   trustedOrigins: TRUSTED_ORIGINS,
@@ -174,7 +193,7 @@ export const auth = betterAuth({
       },
     },
   },
-  plugins: polarPlugin ? [organizationPlugin, polarPlugin] : [organizationPlugin],
+  plugins: authPlugins,
   ...(process.env.COOKIE_DOMAIN
     ? {
         advanced: {

@@ -157,7 +157,7 @@ export function GeneralTab({ orgSlug }: { orgSlug: string }) {
               <SelectTrigger id="currency">
                 <SelectValue />
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent className="max-h-72">
                 {CURRENCIES.map(({ code, name }) => (
                   <SelectItem key={code} value={code}>
                     {code} — {name}

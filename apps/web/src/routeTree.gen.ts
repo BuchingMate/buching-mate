@@ -9,6 +9,7 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as TwoFactorRouteImport } from './routes/two-factor'
 import { Route as SignupRouteImport } from './routes/signup'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as AuthRouteImport } from './routes/_auth'
@@ -38,6 +39,11 @@ import { Route as AuthAdminEventsEventIdIndexRouteImport } from './routes/_auth/
 import { Route as AuthAdminEventsEventIdEditRouteImport } from './routes/_auth/admin/events/$eventId/edit'
 import { Route as AuthAdminEventsEventIdAttendanceRouteImport } from './routes/_auth/admin/events/$eventId/attendance'
 
+const TwoFactorRoute = TwoFactorRouteImport.update({
+  id: '/two-factor',
+  path: '/two-factor',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SignupRoute = SignupRouteImport.update({
   id: '/signup',
   path: '/signup',
@@ -188,6 +194,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/signup': typeof SignupRoute
+  '/two-factor': typeof TwoFactorRoute
   '/admin': typeof AuthAdminRouteWithChildren
   '/onboarding': typeof AuthOnboardingRoute
   '/settings': typeof AuthSettingsRoute
@@ -216,6 +223,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/signup': typeof SignupRoute
+  '/two-factor': typeof TwoFactorRoute
   '/onboarding': typeof AuthOnboardingRoute
   '/settings': typeof AuthSettingsRoute
   '/invite/$invitationId': typeof InviteInvitationIdRoute
@@ -246,6 +254,7 @@ export interface FileRoutesById {
   '/_auth': typeof AuthRouteWithChildren
   '/login': typeof LoginRoute
   '/signup': typeof SignupRoute
+  '/two-factor': typeof TwoFactorRoute
   '/_auth/admin': typeof AuthAdminRouteWithChildren
   '/_auth/onboarding': typeof AuthOnboardingRoute
   '/_auth/settings': typeof AuthSettingsRoute
@@ -276,6 +285,7 @@ export interface FileRouteTypes {
     | '/'
     | '/login'
     | '/signup'
+    | '/two-factor'
     | '/admin'
     | '/onboarding'
     | '/settings'
@@ -304,6 +314,7 @@ export interface FileRouteTypes {
     | '/'
     | '/login'
     | '/signup'
+    | '/two-factor'
     | '/onboarding'
     | '/settings'
     | '/invite/$invitationId'
@@ -333,6 +344,7 @@ export interface FileRouteTypes {
     | '/_auth'
     | '/login'
     | '/signup'
+    | '/two-factor'
     | '/_auth/admin'
     | '/_auth/onboarding'
     | '/_auth/settings'
@@ -364,6 +376,7 @@ export interface RootRouteChildren {
   AuthRoute: typeof AuthRouteWithChildren
   LoginRoute: typeof LoginRoute
   SignupRoute: typeof SignupRoute
+  TwoFactorRoute: typeof TwoFactorRoute
   InviteInvitationIdRoute: typeof InviteInvitationIdRoute
   EventsIndexRoute: typeof EventsIndexRoute
   EventsEventIdBookRoute: typeof EventsEventIdBookRoute
@@ -374,6 +387,13 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/two-factor': {
+      id: '/two-factor'
+      path: '/two-factor'
+      fullPath: '/two-factor'
+      preLoaderRoute: typeof TwoFactorRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/signup': {
       id: '/signup'
       path: '/signup'
@@ -641,6 +661,7 @@ const rootRouteChildren: RootRouteChildren = {
   AuthRoute: AuthRouteWithChildren,
   LoginRoute: LoginRoute,
   SignupRoute: SignupRoute,
+  TwoFactorRoute: TwoFactorRoute,
   InviteInvitationIdRoute: InviteInvitationIdRoute,
   EventsIndexRoute: EventsIndexRoute,
   EventsEventIdBookRoute: EventsEventIdBookRoute,

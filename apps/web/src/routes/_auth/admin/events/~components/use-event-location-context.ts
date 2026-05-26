@@ -41,7 +41,11 @@ export function useEventLocationContext({
 
   const connectZoom = () => {
     if (!orgSlug) return;
-    navigate({ to: "/admin/$orgSlug/settings", params: { orgSlug }, search: { tab: "video" } });
+    navigate({
+      to: "/admin/$orgSlug/settings",
+      params: { orgSlug },
+      search: { tab: "integrations" },
+    });
   };
 
   return { recentLocations, zoomConnected, connectZoom };

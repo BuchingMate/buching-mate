@@ -22,22 +22,13 @@ import { PaymentsTab } from "./~components/settings/payments-tab";
 import { VideoTab } from "./~components/settings/video-tab";
 import { EmailDomainTab } from "./~components/settings/email-domain-tab";
 import { BillingTab } from "./~components/settings/billing-tab";
+import { BroadcastPlanCard } from "./~components/settings/broadcast-plan-card";
 import { DangerTab } from "./~components/settings/danger-tab";
 
 const BILLING_ENABLED = import.meta.env.VITE_BILLING_ENABLED === "true";
 import { pageHead } from "@/lib/seo";
 
-const VALID_TABS = [
-  "general",
-  "categories",
-  "webhooks",
-  "payments",
-  "video",
-  "email-domain",
-  "billing",
-  "members",
-  "danger",
-] as const;
+const VALID_TABS = ["general", "members", "billing", "integrations", "advanced"] as const;
 type SettingsTab = (typeof VALID_TABS)[number];
 
 export const Route = createFileRoute("/_auth/admin/$orgSlug/settings")({
@@ -102,6 +93,8 @@ function SettingsTabs({
   const showSettings = canManageSettings(role);
   const showWebhooks = canManageWebhooks(role);
   const showBilling = BILLING_ENABLED && canManageBilling(role);
+  const showMoney = showPayments || showBilling;
+  const showIntegrations = showWebhooks || showConnectedApps;
 
   return (
     <div className="mx-auto max-w-5xl">
@@ -111,54 +104,45 @@ function SettingsTabs({
           if (v && (VALID_TABS as readonly string[]).includes(String(v))) setTab(v as SettingsTab);
         }}
       >
-        <TabsList>
+        <TabsList className="flex-wrap justify-start group-data-horizontal/tabs:h-auto">
           <TabsTrigger value="general">General</TabsTrigger>
-          <TabsTrigger value="categories">Categories</TabsTrigger>
-          {showWebhooks && <TabsTrigger value="webhooks">Webhooks</TabsTrigger>}
-          {showPayments && <TabsTrigger value="payments">Payments</TabsTrigger>}
-          {showConnectedApps && <TabsTrigger value="video">Connected apps</TabsTrigger>}
-          {showSettings && <TabsTrigger value="email-domain">Email</TabsTrigger>}
-          {showBilling && <TabsTrigger value="billing">Billing</TabsTrigger>}
           <TabsTrigger value="members">Members</TabsTrigger>
-          {showDanger && <TabsTrigger value="danger">Danger</TabsTrigger>}
+          {showMoney && <TabsTrigger value="billing">Billing & payments</TabsTrigger>}
+          {showIntegrations && <TabsTrigger value="integrations">Integrations</TabsTrigger>}
+          {showDanger && <TabsTrigger value="advanced">Advanced</TabsTrigger>}
         </TabsList>
 
-        <TabsContent value="general" className="mt-6">
+        <TabsContent value="general" className="mt-6 space-y-6">
           <GeneralTab orgSlug={orgSlug} />
-        </TabsContent>
-        <TabsContent value="categories" className="mt-6">
           <CategoriesTab />
+          {showSettings && <EmailDomainTab />}
         </TabsContent>
-        {showWebhooks && (
-          <TabsContent value="webhooks" className="mt-6">
-            <WebhooksTab />
-          </TabsContent>
-        )}
-        {showPayments && (
-          <TabsContent value="payments" className="mt-6">
-            <PaymentsTab />
-          </TabsContent>
-        )}
-        {showConnectedApps && (
-          <TabsContent value="video" className="mt-6">
-            <VideoTab />
-          </TabsContent>
-        )}
-        {showSettings && (
-          <TabsContent value="email-domain" className="mt-6">
-            <EmailDomainTab />
-          </TabsContent>
-        )}
-        {showBilling && (
-          <TabsContent value="billing" className="mt-6">
-            <BillingTab orgSlug={orgSlug} />
-          </TabsContent>
-        )}
+
         <TabsContent value="members" className="mt-6">
           <MembersTab role={role} />
         </TabsContent>
+
+        {showMoney && (
+          <TabsContent value="billing" className="mt-6 space-y-6">
+            {showPayments && <PaymentsTab />}
+            {showBilling && (
+              <>
+                <BillingTab orgSlug={orgSlug} />
+                <BroadcastPlanCard />
+              </>
+            )}
+          </TabsContent>
+        )}
+
+        {showIntegrations && (
+          <TabsContent value="integrations" className="mt-6 space-y-6">
+            {showWebhooks && <WebhooksTab />}
+            {showConnectedApps && <VideoTab />}
+          </TabsContent>
+        )}
+
         {showDanger && (
-          <TabsContent value="danger" className="mt-6">
+          <TabsContent value="advanced" className="mt-6">
             <DangerTab />
           </TabsContent>
         )}

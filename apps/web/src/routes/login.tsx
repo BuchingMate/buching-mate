@@ -1,6 +1,7 @@
 import { createFileRoute, Link, redirect, useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { KeyRound } from "lucide-react";
 import { authClient } from "@/lib/auth-client";
 import { attendeeAuthClient } from "@/lib/attendee-auth-client";
 import { Button } from "@/components/ui/button";
@@ -51,6 +52,24 @@ function StaffLogin() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [passkeyLoading, setPasskeyLoading] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    const preloadPasskeys = async () => {
+      if (typeof PublicKeyCredential === "undefined") return;
+      if (!PublicKeyCredential.isConditionalMediationAvailable) return;
+      const available = await PublicKeyCredential.isConditionalMediationAvailable();
+      if (!available || cancelled) return;
+      await authClient.signIn.passkey({ autoFill: true });
+    };
+
+    void preloadPasskeys();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -86,6 +105,26 @@ function StaffLogin() {
       provider: "google",
       callbackURL: `${window.location.origin}/admin`,
     });
+  };
+
+  const handlePasskeySignIn = async () => {
+    setPasskeyLoading(true);
+    setError(null);
+    try {
+      const result = await authClient.signIn.passkey();
+      if (result.error) {
+        setError(result.error.message ?? "Unable to sign in with passkey");
+        return;
+      }
+
+      await queryClient.invalidateQueries({ queryKey: authKeys.session });
+      await queryClient.invalidateQueries({ queryKey: authKeys.currentOrg });
+      await navigate({ to: "/admin" });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to sign in with passkey");
+    } finally {
+      setPasskeyLoading(false);
+    }
   };
 
   return (
@@ -141,6 +180,16 @@ function StaffLogin() {
 
         <Button type="button" variant="outline" className="w-full" onClick={handleGoogleSignIn}>
           Google
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          className="w-full"
+          onClick={handlePasskeySignIn}
+          disabled={passkeyLoading}
+        >
+          <KeyRound className="size-4" />
+          {passkeyLoading ? "Checking passkey..." : "Sign in with passkey"}
         </Button>
 
         <p className="text-center text-sm">
