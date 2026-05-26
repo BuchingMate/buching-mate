@@ -125,6 +125,10 @@ export const orgSettings = pgTable(
     // Weekly broadcast send cap from an active capacity add-on. Null means no
     // add-on: the plan's base cap applies.
     broadcastWeeklyCap: integer("broadcast_weekly_cap"),
+    // Contracted seat count for an enterprise org, set out-of-band when a deal is
+    // signed. Caps membership and is the reconcile target that reverts customer seat
+    // edits in the Polar portal. Null means uncapped (no contract limit set).
+    enterpriseSeatLimit: integer("enterprise_seat_limit"),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },

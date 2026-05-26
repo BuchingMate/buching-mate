@@ -1,0 +1,1 @@
+ALTER TABLE "org_settings" ADD COLUMN "enterprise_seat_limit" integer;

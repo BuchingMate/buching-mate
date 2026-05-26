@@ -6,6 +6,7 @@ import {
   broadcastCapForProduct,
   isBroadcastTierProduct,
   planFromProductId,
+  syncSeatCount,
   type OrgPlan,
 } from "./polar";
 
@@ -38,7 +39,9 @@ export function planFromMetadata(meta: Record<string, unknown> | undefined | nul
   return v === "team" || v === "enterprise" ? v : null;
 }
 
-function mapStatus(s: string): "trialing" | "active" | "past_due" | "canceled" | "incomplete" {
+export function mapStatus(
+  s: string,
+): "trialing" | "active" | "past_due" | "canceled" | "incomplete" {
   switch (s) {
     case "trialing":
       return "trialing";
@@ -127,6 +130,11 @@ async function upsertSubscription(orgId: string, sub: PolarSubscriptionPayload) 
 
     await tx.update(orgSettings).set({ plan, updatedAt: now }).where(eq(orgSettings.orgId, orgId));
   });
+
+  // Reconcile the Polar seat quantity now that the plan/status row is committed:
+  // floor team seats up to the seated (owner/admin) count, and pin enterprise to its
+  // contracted limit. Self-guards (no-op unless active/trialing and the target differs).
+  await syncSeatCount(orgId);
 }
 
 export async function handleSubscriptionCreated(payload: SubPayload) {

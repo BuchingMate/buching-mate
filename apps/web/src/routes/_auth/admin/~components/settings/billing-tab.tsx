@@ -13,19 +13,6 @@ const planLabel: Record<string, string> = {
 
 export function BillingTab(_props: { orgSlug: string }) {
   const orgQuery = useQuery(currentOrgQueryOptions);
-  const stateQuery = useQuery({
-    queryKey: ["billing", "customer-state"],
-    queryFn: async () => {
-      try {
-        const res = await authClient.customer.state();
-        return res.data ?? null;
-      } catch {
-        return null;
-      }
-    },
-    retry: false,
-  });
-
   const subsQuery = useQuery({
     queryKey: ["billing", "subscriptions"],
     queryFn: async () => {
@@ -41,8 +28,11 @@ export function BillingTab(_props: { orgSlug: string }) {
     retry: false,
   });
 
+  // Plan is the webhook-synced source of truth on the org. Do not derive it from
+  // customer.subscriptions.list: that call 500s for team (seat-based) customers in
+  // Polar's member model, which would mask an active Team plan as Free.
+  const plan = orgQuery.data?.org.plan ?? "free";
   const active = subsQuery.data?.result?.items?.[0];
-  const plan = active ? "team" : "free";
 
   async function startCheckout() {
     const orgId = orgQuery.data?.org.id;
@@ -53,7 +43,7 @@ export function BillingTab(_props: { orgSlug: string }) {
     await authClient.customer.portal();
   }
 
-  if (stateQuery.isLoading || subsQuery.isLoading) {
+  if (orgQuery.isLoading) {
     return <div className="text-sm text-muted-foreground">Loading billing…</div>;
   }
 

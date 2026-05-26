@@ -1,5 +1,10 @@
 # Plan Limits
 
+> **Superseded for seats/plans:** the implemented seat-billing model (Free/Team/
+> Enterprise, owner+admin seats, Polar) lives in `06-seat-billing.md`. The
+> Free/Pro notes below are historical. Non-seat limits (events, domains, webhooks)
+> still apply.
+
 ## Scope
 
 Use plan limits without SaaS subscription checkout.

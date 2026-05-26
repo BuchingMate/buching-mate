@@ -17,7 +17,11 @@ import {
   handleSubscriptionRevoked,
   handleSubscriptionUpdated,
 } from "./ee/billing/webhook";
-import { broadcastTierCheckoutProducts, syncSeatCount } from "./ee/billing/polar";
+import {
+  assertSeatAvailableForRole,
+  broadcastTierCheckoutProducts,
+  isSeatedRole,
+} from "./ee/billing/polar";
 import { BETTER_AUTH_URL, TRUSTED_ORIGINS, WEB_URL } from "./env";
 
 const polarClient = process.env.POLAR_ACCESS_TOKEN
@@ -75,13 +79,15 @@ const organizationPlugin = organization({
       if (existing.length > 0) {
         throw new Error("User already belongs to an organization");
       }
+      await assertSeatAvailableForRole(memberData.organizationId, memberData.role);
       return { data: memberData };
     },
-    afterAddMember: async ({ member: memberData }) => {
-      void syncSeatCount(memberData.organizationId);
-    },
-    afterRemoveMember: async ({ member: memberData }) => {
-      void syncSeatCount(memberData.organizationId);
+    beforeUpdateMemberRole: async ({ member: memberData, newRole, organization: org }) => {
+      // Only a promotion from an unseated role into a seat consumes a new seat; a
+      // seated→seated change (e.g. admin→owner) or any demotion is always allowed.
+      if (isSeatedRole(newRole) && !isSeatedRole(memberData.role)) {
+        await assertSeatAvailableForRole(org.id, newRole);
+      }
     },
     beforeUpdateOrganization: async ({ organization: org, member: memberData }) => {
       if (!("slug" in org) || org.slug === undefined) return;
@@ -90,18 +96,18 @@ const organizationPlugin = organization({
         throw new Error("Custom subdomain requires Team plan");
       }
     },
-    beforeAcceptInvitation: async ({ user }) => {
+    beforeAcceptInvitation: async ({ user, invitation, organization: org }) => {
       const existing = await db.select().from(member).where(eq(member.userId, user.id));
       if (existing.length > 0) {
         throw new Error("Already in an organization");
       }
+      // Seats are not reserved at invite time, so re-check at acceptance.
+      await assertSeatAvailableForRole(org.id, invitation.role ?? "member");
     },
   },
-  membershipLimit: async (_user, org) => {
-    const plan = await orgPlanFor(org.id);
-    if (plan === "free") return 1;
-    return Number.MAX_SAFE_INTEGER;
-  },
+  // Total membership is uncapped: manager/viewer are unlimited on every plan. Seats
+  // (owner/admin) are enforced per-role in the add/accept/promote hooks above.
+  membershipLimit: () => Number.MAX_SAFE_INTEGER,
   sendInvitationEmail: async (data) => {
     const inviteLink = `${WEB_URL}/invite/${data.id}`;
     await sendInviteEmail({

@@ -12,6 +12,7 @@
     "db:migrate": "bun --env-file=../../.env src/db/migrate.ts",
     "db:seed": "bun --env-file=../../.env src/db/seed.ts",
     "db:seed:reset": "bun --env-file=../../.env src/db/seed.ts --reset",
+    "enterprise:seats": "bun --env-file=../../.env scripts/set-enterprise-seats.ts",
     "db:studio": "drizzle-kit studio",
     "lint": "oxlint",
     "lint:fix": "oxlint --fix",
