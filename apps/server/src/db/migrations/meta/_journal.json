@@ -120,6 +120,13 @@
       "when": 1779795393685,
       "tag": "0016_same_redwing",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1779827471199,
+      "tag": "0017_tough_star_brand",
+      "breakpoints": true
     }
   ]
 }

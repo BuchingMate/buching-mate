@@ -19,6 +19,7 @@ type PolarSubscriptionPayload = {
   trialEnd: Date | null;
   cancelAtPeriodEnd: boolean;
   seats?: number | null;
+  recurringInterval?: string | null;
   metadata: Record<string, unknown>;
   endsAt?: Date | null;
 };
@@ -107,6 +108,7 @@ async function upsertSubscription(orgId: string, sub: PolarSubscriptionPayload) 
         polarProductId: sub.productId,
         status,
         seatCount: seats,
+        recurringInterval: sub.recurringInterval ?? null,
         currentPeriodEnd: sub.currentPeriodEnd,
         trialEndsAt: sub.trialEnd,
         cancelAtPeriodEnd: sub.cancelAtPeriodEnd,
@@ -120,6 +122,7 @@ async function upsertSubscription(orgId: string, sub: PolarSubscriptionPayload) 
           polarProductId: sub.productId,
           status,
           seatCount: seats,
+          recurringInterval: sub.recurringInterval ?? null,
           currentPeriodEnd: sub.currentPeriodEnd,
           trialEndsAt: sub.trialEnd,
           cancelAtPeriodEnd: sub.cancelAtPeriodEnd,

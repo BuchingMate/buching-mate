@@ -138,6 +138,57 @@ export function baseWeeklySends(plan: OrgPlan): number {
   return Number.MAX_SAFE_INTEGER;
 }
 
+// Admin-seat allowances. A seat is consumed by owner/admin members only. Mirrors
+// the server constants in ee/billing/polar.ts so the web can render plan copy
+// without importing server code.
+export const FREE_SEAT_CAP = 3;
+export const TEAM_INCLUDED_SEATS = 5;
+
+// Team plan pricing for one billing interval, fetched live from Polar (the source
+// of truth) and surfaced to the upgrade card. Amounts are in minor units (cents).
+export interface PlanPricing {
+  interval: "month" | "year";
+  basePriceCents: number;
+  includedSeats: number;
+  extraSeatPriceCents: number;
+  currency: string;
+}
+
+export interface PlanPricingResponse {
+  monthly: PlanPricing | null;
+  annual: PlanPricing | null;
+}
+
+// What the Team plan includes, for the upgrade card checklist. Real features only.
+export const TEAM_BENEFITS: readonly string[] = [
+  `${TEAM_INCLUDED_SEATS} admin seats included`,
+  "Unlimited managers & viewers",
+  `${TEAM_INCLUDED_WEEKLY_SENDS.toLocaleString("en-US")} broadcast sends per week`,
+  "Send email from your own domain",
+  "Custom subdomain",
+] as const;
+
+// Current subscription summary for the plan card. All fields null when the org has
+// no Polar subscription row yet (e.g. Free).
+export interface SubscriptionInfo {
+  plan: OrgPlan;
+  status: string | null;
+  interval: "month" | "year" | null;
+  currentPeriodEnd: string | null;
+  cancelAtPeriodEnd: boolean;
+}
+
+// A past charge on the org's Polar account, for the billing-history table.
+export interface BillingHistoryItem {
+  id: string;
+  date: string;
+  amountCents: number;
+  currency: string;
+  status: string;
+  paid: boolean;
+  invoiceAvailable: boolean;
+}
+
 // An org's reusable email template settings. The same brand wraps every
 // newsletter and invitation the org sends.
 export interface EmailBranding {
@@ -264,6 +315,14 @@ export interface MemberDto {
   email: string | null;
   role: OrgRole;
   createdAt: string;
+}
+
+// Seat usage for an org. A seat is consumed by owner/admin members only; cap is
+// null when uncapped (enterprise with no contracted limit).
+export interface SeatUsageDto {
+  used: number;
+  cap: number | null;
+  plan: OrgPlan;
 }
 
 export interface ResourceDto {

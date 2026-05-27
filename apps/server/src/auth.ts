@@ -21,6 +21,7 @@ import {
   assertSeatAvailableForRole,
   broadcastTierCheckoutProducts,
   isSeatedRole,
+  TEAM_PRODUCT_ANNUAL_ID,
 } from "./ee/billing/polar";
 import { BETTER_AUTH_URL, TRUSTED_ORIGINS, WEB_URL } from "./env";
 
@@ -82,6 +83,12 @@ const organizationPlugin = organization({
       await assertSeatAvailableForRole(memberData.organizationId, memberData.role);
       return { data: memberData };
     },
+    beforeCreateInvitation: async ({ invitation }) => {
+      // Surface the seat limit at invite time so the inviter gets immediate feedback.
+      // Seats are only truly reserved at acceptance (beforeAcceptInvitation), so this
+      // is best-effort UX: it blocks the obvious over-invite, not concurrent pending ones.
+      await assertSeatAvailableForRole(invitation.organizationId, invitation.role);
+    },
     beforeUpdateMemberRole: async ({ member: memberData, newRole, organization: org }) => {
       // Only a promotion from an unseated role into a seat consumes a new seat; a
       // seated→seated change (e.g. admin→owner) or any demotion is always allowed.
@@ -128,6 +135,9 @@ const polarPlugin = polarClient
         checkout({
           products: [
             ...(teamProductId ? [{ productId: teamProductId, slug: "team" }] : []),
+            ...(TEAM_PRODUCT_ANNUAL_ID
+              ? [{ productId: TEAM_PRODUCT_ANNUAL_ID, slug: "team-annual" }]
+              : []),
             ...broadcastTierCheckoutProducts(),
           ],
           successUrl: `${WEB_URL}/admin?tab=billing&success=1`,

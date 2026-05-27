@@ -1,6 +1,11 @@
 import { Polar } from "@polar-sh/sdk";
 import { and, count, eq, inArray } from "drizzle-orm";
-import { BROADCAST_TIERS } from "@workspace/contracts";
+import {
+  BROADCAST_TIERS,
+  type BillingHistoryItem,
+  type PlanPricing,
+  type PlanPricingResponse,
+} from "@workspace/contracts";
 import { db } from "../../db";
 import { member, orgSettings, polarSubscriptions } from "../../db/schema";
 import { logger } from "../../observability/logger";
@@ -69,16 +74,143 @@ export function getPolarClient(): Polar | null {
 }
 
 export const TEAM_PRODUCT_ID = process.env.POLAR_PRODUCT_TEAM ?? "";
+export const TEAM_PRODUCT_ANNUAL_ID = process.env.POLAR_PRODUCT_TEAM_ANNUAL ?? "";
 
 // Resolve the platform plan a product grants, or null when the product is not a
-// recognized platform-plan product. Only the Team product is self-serve; Enterprise
-// is always a custom per-customer deal and is set out-of-band, not inferred here.
-// Email-plan products (broadcast tiers) are a separate product line, handled by the
-// tier helpers above, never here.
+// recognized platform-plan product. Both the monthly and annual Team products grant
+// Team; Enterprise is always a custom per-customer deal and is set out-of-band, not
+// inferred here. Email-plan products (broadcast tiers) are a separate product line,
+// handled by the tier helpers above, never here.
 export function planFromProductId(productId: string | null | undefined): OrgPlan | null {
   if (!productId) return null;
   if (productId === TEAM_PRODUCT_ID) return "team";
+  if (TEAM_PRODUCT_ANNUAL_ID && productId === TEAM_PRODUCT_ANNUAL_ID) return "team";
   return null;
+}
+
+// Minimal structural view of a Polar product's seat-based price, so the parser is
+// testable with a plain object (the real SDK Product is cast to this).
+type SeatTier = { minSeats: number; maxSeats: number | null; pricePerSeat: number };
+type ProductForPricing = {
+  recurringInterval: string | null;
+  prices: Array<{
+    amountType?: string;
+    priceCurrency?: string;
+    seatTiers?: { minimumSeats: number; tiers: SeatTier[] };
+  }>;
+};
+
+// Derive the display pricing for the Team plan from a Polar product. Returns null
+// when the product is not a recurring seat-based product (the card then hides the
+// price and shows a generic CTA). Pure so it is unit-testable.
+export function parseTeamPricing(product: ProductForPricing): PlanPricing | null {
+  const interval = product.recurringInterval;
+  if (interval !== "month" && interval !== "year") return null;
+  const price = product.prices.find((p) => p.amountType === "seat_based" && p.seatTiers);
+  if (!price?.seatTiers || price.seatTiers.tiers.length === 0) return null;
+  const { minimumSeats, tiers } = price.seatTiers;
+  const firstTier = tiers[0]!;
+  const unbounded = tiers.find((t) => t.maxSeats === null) ?? tiers[tiers.length - 1]!;
+  return {
+    interval,
+    includedSeats: minimumSeats,
+    basePriceCents: minimumSeats * firstTier.pricePerSeat,
+    extraSeatPriceCents: unbounded.pricePerSeat,
+    currency: price.priceCurrency ?? "usd",
+  };
+}
+
+// Live Team pricing, cached in-memory. Polar product prices are immutable and rarely
+// change, so a long TTL is fine; on any fetch error we return a null entry so the UI
+// degrades gracefully rather than failing the whole billing page.
+const PRICING_TTL_MS = 60 * 60 * 1000;
+let pricingCache: { value: PlanPricingResponse; expiresAt: number } | null = null;
+
+async function fetchPricing(polar: Polar, productId: string): Promise<PlanPricing | null> {
+  if (!productId) return null;
+  try {
+    const product = await polar.products.get({ id: productId });
+    return parseTeamPricing(product as unknown as ProductForPricing);
+  } catch (err) {
+    logger.warn({ err, productId }, "polar.getTeamPricing.failed");
+    return null;
+  }
+}
+
+export async function getTeamPricing(): Promise<PlanPricingResponse> {
+  if (pricingCache && pricingCache.expiresAt > Date.now()) return pricingCache.value;
+  const polar = getPolarClient();
+  const value: PlanPricingResponse = polar
+    ? {
+        monthly: await fetchPricing(polar, TEAM_PRODUCT_ID),
+        annual: await fetchPricing(polar, TEAM_PRODUCT_ANNUAL_ID),
+      }
+    : { monthly: null, annual: null };
+  pricingCache = { value, expiresAt: Date.now() + PRICING_TTL_MS };
+  return value;
+}
+
+// Past charges for a Polar customer, newest first. Best-effort: returns [] on error
+// so the billing page never hard-fails on history.
+export async function listBillingHistory(customerId: string): Promise<BillingHistoryItem[]> {
+  const polar = getPolarClient();
+  if (!polar) return [];
+  const items: BillingHistoryItem[] = [];
+  try {
+    const result = await polar.orders.list({ customerId });
+    for await (const page of result) {
+      for (const o of page.result.items) {
+        items.push({
+          id: o.id,
+          date: o.createdAt.toISOString(),
+          amountCents: o.totalAmount,
+          currency: o.currency,
+          status: o.status,
+          paid: o.paid,
+          invoiceAvailable: o.isInvoiceGenerated,
+        });
+      }
+    }
+  } catch (err) {
+    logger.warn({ err, customerId }, "polar.listBillingHistory.failed");
+  }
+  items.sort((a, b) => (a.date < b.date ? 1 : -1));
+  return items;
+}
+
+// Resolve an order's invoice for download. Guards that the order belongs to the
+// expected customer so one org can't fetch another's invoice. Invoice generation is
+// async: when not yet generated we trigger it and report `pending` for the caller to
+// retry shortly.
+export type InvoiceResult =
+  | { kind: "url"; url: string }
+  | { kind: "pending" }
+  | { kind: "not_found" }
+  | { kind: "forbidden" };
+
+export async function getInvoiceForOrder(
+  orderId: string,
+  expectedCustomerId: string,
+): Promise<InvoiceResult> {
+  const polar = getPolarClient();
+  if (!polar) return { kind: "not_found" };
+  let order;
+  try {
+    order = await polar.orders.get({ id: orderId });
+  } catch {
+    return { kind: "not_found" };
+  }
+  if (order.customerId !== expectedCustomerId) return { kind: "forbidden" };
+  if (!order.isInvoiceGenerated) {
+    try {
+      await polar.orders.generateInvoice({ id: orderId });
+    } catch (err) {
+      logger.warn({ err, orderId }, "polar.generateInvoice.failed");
+    }
+    return { kind: "pending" };
+  }
+  const inv = await polar.orders.invoice({ id: orderId });
+  return { kind: "url", url: inv.url };
 }
 
 // Count members that occupy a seat (owner/admin) in an org.
@@ -216,6 +348,25 @@ export async function seatCapFor(orgId: string): Promise<number> {
   });
 }
 
+// Current seat usage for an org: seated members in use, the cap, and the plan.
+// `cap` is null when uncapped (enterprise with no contracted limit) so the UI can
+// render "Unlimited" instead of a huge number.
+export async function getSeatUsage(
+  orgId: string,
+): Promise<{ used: number; cap: number | null; plan: OrgPlan }> {
+  const [used, cap, settings] = await Promise.all([
+    countSeatedMembers(orgId),
+    seatCapFor(orgId),
+    db
+      .select({ plan: orgSettings.plan })
+      .from(orgSettings)
+      .where(eq(orgSettings.orgId, orgId))
+      .limit(1),
+  ]);
+  const plan = (settings[0]?.plan ?? "free") as OrgPlan;
+  return { used, cap: cap >= Number.MAX_SAFE_INTEGER ? null : cap, plan };
+}
+
 // Throw when adding/promoting a member into `role` would exceed the org's seat cap.
 // No-op for unseated roles (manager/viewer are unlimited). Callers must only invoke
 // this for a member that is not already seated, so a seated→seated change is allowed.
@@ -231,4 +382,44 @@ export async function assertSeatAvailableForRole(orgId: string, role: string): P
       `Admin seat limit reached (${cap}). Upgrade your plan or buy more seats to add another owner or admin.`,
     );
   }
+}
+
+// Ensure a member occupies a Polar seat on the subscription. A seat-based ("team")
+// customer has no portal session until at least one member exists, so we assign the
+// billing owner. `immediateClaim` claims the seat via the API without sending Polar's
+// invitation email (so it never collides with our own invite flow). Best-effort and
+// idempotent: re-assigning an already-claimed member is a no-op we ignore.
+export async function ensureSeatAssigned(args: {
+  subscriptionId: string;
+  externalMemberId: string;
+  email: string;
+}): Promise<void> {
+  const polar = getPolarClient();
+  if (!polar) return;
+  try {
+    await polar.customerSeats.assignSeat({
+      subscriptionId: args.subscriptionId,
+      externalMemberId: args.externalMemberId,
+      email: args.email,
+      immediateClaim: true,
+    });
+  } catch (err) {
+    logger.warn({ err, subscriptionId: args.subscriptionId }, "polar.ensureSeatAssigned.skip");
+  }
+}
+
+// Create a customer-portal session scoped to a member and return its URL. Member
+// context is required for team (seat-based) customers, which is why the better-auth
+// plugin's own portal endpoint 500s for them.
+export async function createPortalUrl(args: {
+  customerId: string;
+  externalMemberId: string;
+}): Promise<string | null> {
+  const polar = getPolarClient();
+  if (!polar) return null;
+  const session = await polar.customerSessions.create({
+    customerId: args.customerId,
+    externalMemberId: args.externalMemberId,
+  });
+  return session.customerPortalUrl;
 }

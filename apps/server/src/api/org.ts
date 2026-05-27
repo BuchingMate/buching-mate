@@ -4,6 +4,7 @@ import { apiError } from "./errors";
 import type { ApiEnv } from "./types";
 import { isRecord, readJson, stringOrNull } from "./validation";
 import { requireAuth, requireOrg, requireRole } from "../middleware/auth";
+import { getSeatUsage } from "../ee/billing/polar";
 import {
   deleteInvite,
   getCurrentOrgContext,
@@ -134,6 +135,7 @@ export const orgRoutes = new Hono<ApiEnv>()
     return c.json({ settings: await updateOrgSettings(c.var.orgId, input) });
   })
   .get("/members", async (c) => c.json({ members: await listMembers(c.var.orgId) }))
+  .get("/seats", async (c) => c.json(await getSeatUsage(c.var.orgId)))
   .post("/invites", requireRole("admin"), (c) =>
     c.json({ orgId: c.var.orgId, created: false }, 501),
   )

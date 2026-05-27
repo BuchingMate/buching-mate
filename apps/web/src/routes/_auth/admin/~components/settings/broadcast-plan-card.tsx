@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { authClient } from "@/lib/auth-client";
+import { getBillingPortalUrl } from "@/lib/billing";
 import { currentOrgQueryOptions } from "@/queries/auth";
 import { orgSettingsQueryOptions } from "@/queries/org";
 
@@ -25,7 +26,8 @@ async function subscribe(slug: string, orgId: string) {
 }
 
 async function openPortal() {
-  await authClient.customer.portal();
+  const { url } = await getBillingPortalUrl();
+  window.location.href = url;
 }
 
 export function BroadcastPlanCard() {
@@ -55,14 +57,14 @@ export function BroadcastPlanCard() {
             </AlertDescription>
           </Alert>
         ) : (
-          <TierTable cap={cap} orgId={orgId} />
+          <TierTable cap={cap} orgId={orgId} hasAddon={cap > TEAM_INCLUDED_WEEKLY_SENDS} />
         )}
       </CardContent>
     </Card>
   );
 }
 
-function TierTable({ cap, orgId }: { cap: number; orgId: string }) {
+function TierTable({ cap, orgId, hasAddon }: { cap: number; orgId: string; hasAddon: boolean }) {
   return (
     <div className="space-y-4">
       <div className="overflow-hidden rounded-lg border border-border">
@@ -81,25 +83,46 @@ function TierTable({ cap, orgId }: { cap: number; orgId: string }) {
               current={cap === TEAM_INCLUDED_WEEKLY_SENDS}
             />
             {BROADCAST_TIERS.map((tier) => (
-              <Tier key={tier.slug} tier={tier} cap={cap} orgId={orgId} />
+              <Tier key={tier.slug} tier={tier} cap={cap} orgId={orgId} hasAddon={hasAddon} />
             ))}
           </tbody>
         </table>
       </div>
-      <Button variant="outline" size="sm" onClick={openPortal}>
-        Manage or cancel add-on
-      </Button>
+      {hasAddon ? (
+        <div className="space-y-1">
+          <Button variant="outline" size="sm" onClick={openPortal}>
+            Change or cancel add-on
+          </Button>
+          <p className="text-xs text-muted-foreground">
+            You have one active add-on. Switch tiers or cancel it in the billing portal — only one
+            add-on can be active at a time.
+          </p>
+        </div>
+      ) : null}
     </div>
   );
 }
 
-function Tier({ tier, cap, orgId }: { tier: BroadcastTier; cap: number; orgId: string }) {
+// While an add-on is active, tier switching happens in the Polar portal (one
+// subscription, switched in place), so the per-tier "Choose" buttons are hidden to
+// prevent stacking a second add-on.
+function Tier({
+  tier,
+  cap,
+  orgId,
+  hasAddon,
+}: {
+  tier: BroadcastTier;
+  cap: number;
+  orgId: string;
+  hasAddon: boolean;
+}) {
   return (
     <TierRow
       sends={tier.weeklyCap}
       price={priceLabel(tier.monthlyPriceCents)}
       current={cap === tier.weeklyCap}
-      onSubscribe={() => subscribe(tier.slug, orgId)}
+      onSubscribe={hasAddon ? undefined : () => subscribe(tier.slug, orgId)}
     />
   );
 }

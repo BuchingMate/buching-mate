@@ -93,8 +93,7 @@ function SettingsTabs({
   const showSettings = canManageSettings(role);
   const showWebhooks = canManageWebhooks(role);
   const showBilling = BILLING_ENABLED && canManageBilling(role);
-  const showMoney = showPayments || showBilling;
-  const showIntegrations = showWebhooks || showConnectedApps;
+  const showIntegrations = showWebhooks || showConnectedApps || showPayments;
 
   return (
     <div className="mx-auto max-w-5xl">
@@ -107,7 +106,7 @@ function SettingsTabs({
         <TabsList className="flex-wrap justify-start group-data-horizontal/tabs:h-auto">
           <TabsTrigger value="general">General</TabsTrigger>
           <TabsTrigger value="members">Members</TabsTrigger>
-          {showMoney && <TabsTrigger value="billing">Billing & payments</TabsTrigger>}
+          {showBilling && <TabsTrigger value="billing">Billing</TabsTrigger>}
           {showIntegrations && <TabsTrigger value="integrations">Integrations</TabsTrigger>}
           {showDanger && <TabsTrigger value="advanced">Advanced</TabsTrigger>}
         </TabsList>
@@ -122,20 +121,16 @@ function SettingsTabs({
           <MembersTab role={role} />
         </TabsContent>
 
-        {showMoney && (
+        {showBilling && (
           <TabsContent value="billing" className="mt-6 space-y-6">
-            {showPayments && <PaymentsTab />}
-            {showBilling && (
-              <>
-                <BillingTab orgSlug={orgSlug} />
-                <BroadcastPlanCard />
-              </>
-            )}
+            <BillingTab orgSlug={orgSlug} />
+            <BroadcastPlanCard />
           </TabsContent>
         )}
 
         {showIntegrations && (
           <TabsContent value="integrations" className="mt-6 space-y-6">
+            {showPayments && <PaymentsTab />}
             {showWebhooks && <WebhooksTab />}
             {showConnectedApps && <VideoTab />}
           </TabsContent>

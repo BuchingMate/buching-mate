@@ -1,5 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import { isSeatedRole, planFromProductId, seatCapForPlan, shouldSyncSeats } from "./polar";
+import {
+  isSeatedRole,
+  parseTeamPricing,
+  planFromProductId,
+  seatCapForPlan,
+  shouldSyncSeats,
+} from "./polar";
 import { mapStatus, planFromMetadata } from "./webhook";
 
 describe("planFromProductId", () => {
@@ -161,5 +167,70 @@ describe("mapStatus", () => {
 
   test("should map an unknown status to incomplete", () => {
     expect(mapStatus("something_new")).toBe("incomplete");
+  });
+});
+
+describe("parseTeamPricing", () => {
+  // A seat-min-5 product, $10/seat (single fixed tier): 5 included = $50 base.
+  const seatProduct = (interval: string | null) => ({
+    recurringInterval: interval,
+    prices: [
+      {
+        amountType: "seat_based",
+        priceCurrency: "usd",
+        seatTiers: {
+          minimumSeats: 5,
+          tiers: [{ minSeats: 5, maxSeats: null, pricePerSeat: 1000 }],
+        },
+      },
+    ],
+  });
+
+  test("should derive base, included seats, and extra-seat price from seat tiers", () => {
+    expect(parseTeamPricing(seatProduct("month"))).toEqual({
+      interval: "month",
+      includedSeats: 5,
+      basePriceCents: 5000,
+      extraSeatPriceCents: 1000,
+      currency: "usd",
+    });
+  });
+
+  test("should carry the annual interval through", () => {
+    expect(parseTeamPricing(seatProduct("year"))?.interval).toBe("year");
+  });
+
+  test("should use the unbounded tier for the extra-seat price across graduated tiers", () => {
+    const pricing = parseTeamPricing({
+      recurringInterval: "month",
+      prices: [
+        {
+          amountType: "seat_based",
+          priceCurrency: "usd",
+          seatTiers: {
+            minimumSeats: 5,
+            tiers: [
+              { minSeats: 1, maxSeats: 5, pricePerSeat: 1000 },
+              { minSeats: 6, maxSeats: null, pricePerSeat: 800 },
+            ],
+          },
+        },
+      ],
+    });
+    expect(pricing?.basePriceCents).toBe(5000); // 5 * first-tier 1000
+    expect(pricing?.extraSeatPriceCents).toBe(800); // unbounded tier
+  });
+
+  test("should return null when the product is not recurring", () => {
+    expect(parseTeamPricing(seatProduct(null))).toBeNull();
+  });
+
+  test("should return null when there is no seat-based price", () => {
+    expect(
+      parseTeamPricing({
+        recurringInterval: "month",
+        prices: [{ amountType: "fixed", priceCurrency: "usd" }],
+      }),
+    ).toBeNull();
   });
 });

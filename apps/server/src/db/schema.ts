@@ -752,6 +752,8 @@ export const polarSubscriptions = pgTable(
     polarProductId: text("polar_product_id"),
     status: polarSubscriptionStatus("status").notNull().default("incomplete"),
     seatCount: integer("seat_count").notNull().default(1),
+    // Billing cadence from Polar: "month" or "year". Null until a subscription syncs.
+    recurringInterval: text("recurring_interval"),
     currentPeriodEnd: timestamp("current_period_end"),
     trialEndsAt: timestamp("trial_ends_at"),
     cancelAtPeriodEnd: boolean("cancel_at_period_end").notNull().default(false),

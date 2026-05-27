@@ -7,6 +7,7 @@
     "setup": "bun scripts/setup.ts",
     "build": "turbo build",
     "dev": "bun run db:up && turbo dev",
+    "dev:apps": "turbo dev",
     "lint": "turbo lint",
     "lint:fix": "turbo lint:fix",
     "format": "turbo format",

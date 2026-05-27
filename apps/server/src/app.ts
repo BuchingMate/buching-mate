@@ -6,6 +6,7 @@ import { observability } from "./middleware/observability";
 import type { HealthResponse, RootResponse } from "@workspace/contracts";
 import { assetRoutes } from "./api/assets";
 import { attendeeRoutes } from "./api/attendees";
+import { billingRoutes } from "./api/billing";
 import { broadcastRoutes } from "./api/broadcasts";
 import { eventRoutes } from "./api/events";
 import { geoRoutes } from "./api/geo";
@@ -70,6 +71,7 @@ export function createApp() {
   app.route("/api/attendees", attendeeRoutes);
   app.route("/api/registrations", registrationRoutes);
   app.route("/api/payments", paymentRoutes);
+  app.route("/api/billing", billingRoutes);
   app.route("/api/video", videoRoutes);
   app.route("/api/webhooks", webhookRoutes);
   app.route("/api/public", publicRoutes);

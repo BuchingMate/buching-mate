@@ -1,10 +1,11 @@
 import { queryOptions } from "@tanstack/react-query";
-import { getOrgMembers, getOrgSettings } from "@/lib/org";
+import { getOrgMembers, getOrgSettings, getSeatUsage } from "@/lib/org";
 
 export const orgKeys = {
   all: ["org"] as const,
   settings: () => [...orgKeys.all, "settings"] as const,
   members: () => [...orgKeys.all, "members"] as const,
+  seats: () => [...orgKeys.all, "seats"] as const,
 };
 
 export const orgSettingsQueryOptions = queryOptions({
@@ -15,4 +16,9 @@ export const orgSettingsQueryOptions = queryOptions({
 export const orgMembersQueryOptions = queryOptions({
   queryKey: orgKeys.members(),
   queryFn: getOrgMembers,
+});
+
+export const orgSeatUsageQueryOptions = queryOptions({
+  queryKey: orgKeys.seats(),
+  queryFn: getSeatUsage,
 });
