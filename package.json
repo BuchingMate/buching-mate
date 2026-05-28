@@ -15,7 +15,8 @@
     "typecheck": "turbo typecheck",
     "db:up": "docker compose up -d",
     "db:down": "docker compose down",
-    "db:logs": "docker compose logs -f db"
+    "db:logs": "docker compose logs -f db",
+    "db:migrate": "bun run --filter server db:migrate"
   },
   "devDependencies": {
     "@cloudflare/vite-plugin": "^1.37.1",

@@ -7,6 +7,7 @@ import { getCurrentOrg } from "@/lib/org";
 
 export const authKeys = {
   session: ["auth", "session"] as const,
+  accounts: ["auth", "accounts"] as const,
   currentOrg: ["auth", "current-org"] as const,
   attendeeSession: ["auth", "attendee-session"] as const,
 };
@@ -26,6 +27,17 @@ export const sessionQueryOptions = queryOptions({
   queryFn: async () => {
     const result = await authClient.getSession(sessionFetchOptions());
     return result.data ?? null;
+  },
+  staleTime: 1000 * 60 * 5,
+});
+
+// Linked auth accounts for the current user. A `credential` provider means a
+// password is set; social-only users (e.g. Google) have no such account.
+export const accountsQueryOptions = queryOptions({
+  queryKey: authKeys.accounts,
+  queryFn: async () => {
+    const result = await authClient.listAccounts(sessionFetchOptions());
+    return result.data ?? [];
   },
   staleTime: 1000 * 60 * 5,
 });

@@ -40,9 +40,10 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useTheme, type Theme } from "@/components/theme-provider";
 import { authClient } from "@/lib/auth-client";
+import { api } from "@/lib/api";
 import { BUSINESS_NAME } from "@/lib/branding";
 import { pageHead } from "@/lib/seo";
-import { authKeys, sessionQueryOptions } from "@/queries/auth";
+import { accountsQueryOptions, authKeys, sessionQueryOptions } from "@/queries/auth";
 import { TwoFactorDialog } from "./settings/~components/two-factor-dialog";
 
 export const Route = createFileRoute("/_auth/settings")({
@@ -117,7 +118,7 @@ function AccountTab() {
             />
           </div>
           <div className="rounded-lg border">
-            <PasswordChangeForm />
+            <PasswordSection />
           </div>
           <div className="rounded-lg border">
             <TwoFactorManagement />
@@ -251,7 +252,50 @@ function ProfileForm({
   );
 }
 
-function PasswordChangeForm() {
+// Social-login users (e.g. Google) have no `credential` account and thus no
+// password, so "change password" is impossible for them. Pick the right form.
+function PasswordSection() {
+  const accountsQuery = useQuery(accountsQueryOptions);
+  const hasPassword = accountsQuery.data?.some((a) => a.providerId === "credential");
+
+  if (accountsQuery.isPending) {
+    return (
+      <div className="flex items-start gap-3 px-4 py-3">
+        <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
+          <ShieldCheck className="size-4" />
+        </span>
+        <p className="mt-1 text-sm text-muted-foreground">Loading…</p>
+      </div>
+    );
+  }
+
+  return <PasswordDialog mode={hasPassword ? "change" : "set"} />;
+}
+
+const PASSWORD_COPY = {
+  set: {
+    title: "Set a password",
+    description: "Choose a password to enable email sign-in alongside your social login.",
+    hint: "You signed in with a social provider. Set a password to also sign in with your email.",
+    submitIdle: "Set password",
+    submitBusy: "Saving…",
+    successToast: "Password set. You can now sign in with email and password.",
+    genericError: "Unable to set password. Try again.",
+  },
+  change: {
+    title: "Change password",
+    description: "Enter your current password before setting a new one.",
+    hint: "Enter your current password before setting a new one.",
+    submitIdle: "Update password",
+    submitBusy: "Updating…",
+    successToast: "Password updated.",
+    genericError: "Unable to change password. Try again.",
+  },
+} as const;
+
+function PasswordDialog({ mode }: { mode: "set" | "change" }) {
+  const queryClient = useQueryClient();
+  const copy = PASSWORD_COPY[mode];
   const [open, setOpen] = useState(false);
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -267,25 +311,31 @@ function PasswordChangeForm() {
     setError("");
   };
 
-  const changePassword = useMutation({
+  const mutation = useMutation({
     mutationFn: async () => {
+      if (mode === "set") {
+        await api.post("/api/account/set-password", { newPassword });
+        return;
+      }
       const result = await authClient.changePassword({
         currentPassword,
         newPassword,
         revokeOtherSessions,
       });
-
       if (result.error) {
-        throw new Error(result.error.message ?? "Unable to change password. Try again.");
+        throw new Error(result.error.message ?? copy.genericError);
       }
     },
-    onSuccess: () => {
+    onSuccess: async () => {
       reset();
       setOpen(false);
-      toast.success("Password updated.");
+      toast.success(copy.successToast);
+      if (mode === "set") {
+        await queryClient.invalidateQueries({ queryKey: authKeys.accounts });
+      }
     },
     onError: (err) => {
-      setError(err instanceof Error ? err.message : "Unable to change password. Try again.");
+      setError(err instanceof Error ? err.message : copy.genericError);
     },
   });
 
@@ -293,17 +343,17 @@ function PasswordChangeForm() {
     event.preventDefault();
 
     if (newPassword.length < 8) {
-      setError("New password must be at least 8 characters.");
+      setError("Password must be at least 8 characters.");
       return;
     }
 
     if (newPassword !== confirmPassword) {
-      setError("New password and confirmation do not match.");
+      setError("Password and confirmation do not match.");
       return;
     }
 
     setError("");
-    changePassword.mutate();
+    mutation.mutate();
   };
 
   const handleOpenChange = (next: boolean) => {
@@ -319,37 +369,35 @@ function PasswordChangeForm() {
         </span>
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <p className="font-medium">Change password</p>
+            <p className="font-medium">{copy.title}</p>
             <DialogTrigger render={<Button variant="outline" size="sm" />}>
-              Change password
+              {copy.title}
             </DialogTrigger>
           </div>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Enter your current password before setting a new one.
-          </p>
+          <p className="mt-1 text-sm text-muted-foreground">{copy.hint}</p>
         </div>
       </div>
 
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Change password</DialogTitle>
-          <DialogDescription>
-            Enter your current password before setting a new one.
-          </DialogDescription>
+          <DialogTitle>{copy.title}</DialogTitle>
+          <DialogDescription>{copy.description}</DialogDescription>
         </DialogHeader>
 
         <form onSubmit={submit} className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="currentPassword">Current password</Label>
-            <Input
-              id="currentPassword"
-              type="password"
-              autoComplete="current-password"
-              value={currentPassword}
-              onChange={(event) => setCurrentPassword(event.target.value)}
-              required
-            />
-          </div>
+          {mode === "change" ? (
+            <div className="space-y-2">
+              <Label htmlFor="currentPassword">Current password</Label>
+              <Input
+                id="currentPassword"
+                type="password"
+                autoComplete="current-password"
+                value={currentPassword}
+                onChange={(event) => setCurrentPassword(event.target.value)}
+                required
+              />
+            </div>
+          ) : null}
           <div className="space-y-2">
             <Label htmlFor="newPassword">New password</Label>
             <Input
@@ -375,15 +423,17 @@ function PasswordChangeForm() {
             />
           </div>
 
-          <label className="flex items-start gap-2 text-sm">
-            <Checkbox
-              checked={revokeOtherSessions}
-              onCheckedChange={(checked) => setRevokeOtherSessions(Boolean(checked))}
-            />
-            <span className="leading-5 text-muted-foreground">
-              Sign out other active sessions after changing my password.
-            </span>
-          </label>
+          {mode === "change" ? (
+            <label className="flex items-start gap-2 text-sm">
+              <Checkbox
+                checked={revokeOtherSessions}
+                onCheckedChange={(checked) => setRevokeOtherSessions(Boolean(checked))}
+              />
+              <span className="leading-5 text-muted-foreground">
+                Sign out other active sessions after changing my password.
+              </span>
+            </label>
+          ) : null}
 
           {error ? (
             <Alert variant="destructive">
@@ -397,12 +447,12 @@ function PasswordChangeForm() {
               type="button"
               variant="outline"
               onClick={() => handleOpenChange(false)}
-              disabled={changePassword.isPending}
+              disabled={mutation.isPending}
             >
               Cancel
             </Button>
-            <Button type="submit" disabled={changePassword.isPending}>
-              {changePassword.isPending ? "Updating…" : "Update password"}
+            <Button type="submit" disabled={mutation.isPending}>
+              {mutation.isPending ? copy.submitBusy : copy.submitIdle}
             </Button>
           </DialogFooter>
         </form>

@@ -4,6 +4,7 @@ import { auth } from "./auth";
 import { BUSINESS_SLUG } from "./branding";
 import { observability } from "./middleware/observability";
 import type { HealthResponse, RootResponse } from "@workspace/contracts";
+import { accountRoutes } from "./api/account";
 import { assetRoutes } from "./api/assets";
 import { attendeeRoutes } from "./api/attendees";
 import { billingRoutes } from "./api/billing";
@@ -63,6 +64,7 @@ export function createApp() {
   app.on(["POST", "GET"], "/api/auth/*", (c) => auth.handler(c.req.raw));
 
   app.route("/api/org", orgRoutes);
+  app.route("/api/account", accountRoutes);
   app.route("/api/assets", assetRoutes);
   app.route("/api/resources", resourceRoutes);
   app.route("/api/events", eventRoutes);

@@ -90,8 +90,10 @@ function StaffLogin() {
         return;
       }
 
-      await queryClient.invalidateQueries({ queryKey: authKeys.session });
-      await queryClient.invalidateQueries({ queryKey: authKeys.currentOrg });
+      // refetchType "all" forces the (inactive) session/org queries to refetch now;
+      // otherwise the /admin guard reads stale null from the cache and bounces here.
+      await queryClient.invalidateQueries({ queryKey: authKeys.session, refetchType: "all" });
+      await queryClient.invalidateQueries({ queryKey: authKeys.currentOrg, refetchType: "all" });
       await navigate({ to: "/admin" });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to sign in");
@@ -117,8 +119,10 @@ function StaffLogin() {
         return;
       }
 
-      await queryClient.invalidateQueries({ queryKey: authKeys.session });
-      await queryClient.invalidateQueries({ queryKey: authKeys.currentOrg });
+      // refetchType "all" forces the (inactive) session/org queries to refetch now;
+      // otherwise the /admin guard reads stale null from the cache and bounces here.
+      await queryClient.invalidateQueries({ queryKey: authKeys.session, refetchType: "all" });
+      await queryClient.invalidateQueries({ queryKey: authKeys.currentOrg, refetchType: "all" });
       await navigate({ to: "/admin" });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to sign in with passkey");
