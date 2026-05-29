@@ -1,9 +1,10 @@
 import { useQuery } from "@tanstack/react-query";
 import type { BillingHistoryItem } from "@workspace/contracts";
+import { ExternalLink } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { getInvoiceUrl } from "@/lib/billing";
+import { getBillingPortalUrl, getInvoiceUrl } from "@/lib/billing";
 import { billingHistoryQueryOptions } from "@/queries/billing";
 
 function money(cents: number, currency: string): string {
@@ -22,15 +23,30 @@ async function downloadInvoice(id: string) {
   }
 }
 
+async function openPortal() {
+  try {
+    const { url } = await getBillingPortalUrl();
+    window.location.href = url;
+  } catch {
+    toast.error("Unable to open billing portal. Try again.");
+  }
+}
+
 export function BillingHistoryCard() {
   const historyQuery = useQuery(billingHistoryQueryOptions);
   const items = historyQuery.data?.items ?? [];
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle>Billing history</CardTitle>
-        <CardDescription>Past charges on your account.</CardDescription>
+      <CardHeader className="flex-row items-start justify-between gap-3 space-y-0">
+        <div className="space-y-1.5">
+          <CardTitle>Billing history</CardTitle>
+          <CardDescription>Past charges on your account.</CardDescription>
+        </div>
+        <Button variant="outline" size="sm" onClick={openPortal}>
+          <ExternalLink className="size-4" />
+          Billing portal
+        </Button>
       </CardHeader>
       <CardContent>
         {historyQuery.isLoading ? (

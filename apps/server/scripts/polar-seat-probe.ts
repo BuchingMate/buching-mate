@@ -20,7 +20,8 @@ const polar = new Polar({ accessToken: token, server });
 
 const argv = process.argv.slice(2);
 const assignIdx = argv.indexOf("--assign");
-const assign = assignIdx >= 0 ? { externalMemberId: argv[assignIdx + 1], email: argv[assignIdx + 2] } : null;
+const assign =
+  assignIdx >= 0 ? { externalMemberId: argv[assignIdx + 1], email: argv[assignIdx + 2] } : null;
 const bumpIdx = argv.indexOf("--bump");
 const bump = bumpIdx >= 0 ? Number(argv[bumpIdx + 1]) : null;
 
@@ -54,12 +55,20 @@ const orgId = product?.organizationId;
 // 2. Find an active Team subscription + its assigned seats.
 const sub = await step("2. Active Team subscription + assigned seats", async () => {
   if (!orgId) return null;
-  const res = await polar.subscriptions.list({ organizationId: orgId, productId: teamProductId, active: true });
+  const res = await polar.subscriptions.list({
+    organizationId: orgId,
+    productId: teamProductId,
+    active: true,
+  });
   let found: { id: string; seats?: number | null; customerId: string } | null = null;
   for await (const page of res) {
     const item = page.result.items[0];
     if (item) {
-      found = { id: item.id, seats: (item as { seats?: number | null }).seats, customerId: item.customerId };
+      found = {
+        id: item.id,
+        seats: (item as { seats?: number | null }).seats,
+        customerId: item.customerId,
+      };
       break;
     }
   }
@@ -113,7 +122,9 @@ if (assign?.externalMemberId) {
       externalMemberId: assign.externalMemberId,
     });
     ok(`portal URL: ${s.customerPortalUrl}`);
-    log("  → check the assigned member's inbox: expect NO Polar invitation email (immediateClaim).");
+    log(
+      "  → check the assigned member's inbox: expect NO Polar invitation email (immediateClaim).",
+    );
   });
 } else {
   log("\n(skip 4: pass --assign <externalMemberId> <email> to assign the owner + test the portal)");
