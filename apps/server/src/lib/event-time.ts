@@ -18,11 +18,15 @@ function offsetMs(instant: Date, timeZone: string): number {
   for (const p of dtf.formatToParts(instant)) {
     if (p.type !== "literal") parts[p.type] = Number(p.value);
   }
+  // Some engines format midnight as hour=24 (end-of-day) instead of 0 (start-of-day).
+  // Roll over to the next day so the resulting UTC instant stays correct;
+  // Date.UTC normalizes month/year boundaries for us.
+  const rollover = parts.hour === 24;
   const asUtc = Date.UTC(
     parts.year,
     parts.month - 1,
-    parts.day,
-    parts.hour === 24 ? 0 : parts.hour,
+    rollover ? parts.day + 1 : parts.day,
+    rollover ? 0 : parts.hour,
     parts.minute,
     parts.second,
   );
@@ -81,6 +85,18 @@ export function utcToZonedWallClock(
   for (const p of dtf.formatToParts(instant)) {
     if (p.type !== "literal") parts[p.type] = p.value;
   }
-  const hour = parts.hour === "24" ? "00" : parts.hour;
-  return { date: `${parts.year}-${parts.month}-${parts.day}`, time: `${hour}:${parts.minute}` };
+  // Mirror the offsetMs rollover: hour=24 means start-of-next-day in this tz.
+  if (parts.hour === "24") {
+    const rolled = new Date(
+      Date.UTC(Number(parts.year), Number(parts.month) - 1, Number(parts.day) + 1),
+    );
+    const y = String(rolled.getUTCFullYear()).padStart(4, "0");
+    const m = String(rolled.getUTCMonth() + 1).padStart(2, "0");
+    const d = String(rolled.getUTCDate()).padStart(2, "0");
+    return { date: `${y}-${m}-${d}`, time: `00:${parts.minute}` };
+  }
+  return {
+    date: `${parts.year}-${parts.month}-${parts.day}`,
+    time: `${parts.hour}:${parts.minute}`,
+  };
 }

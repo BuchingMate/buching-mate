@@ -60,6 +60,15 @@ export class EventReviewerInvalidError extends Error {
   }
 }
 
+// Thrown when an end edit can't be resolved to a complete (date,time) pair —
+// e.g. the client sent only endTime on an event that has no prior endDate.
+export class EventEndIncompleteError extends Error {
+  constructor() {
+    super("endDate and endTime must be set together");
+    this.name = "EventEndIncompleteError";
+  }
+}
+
 async function ensureOrgReviewer(orgId: string, reviewerId: string | null | undefined) {
   if (!reviewerId) return;
   const rows = await db
@@ -437,36 +446,55 @@ export async function updateEvent(
       const timezone = eventInput.timezone ?? prev.timezone;
       const date = eventInput.date ?? prev.date;
       const time = eventInput.time ?? prev.time;
-      const schedule = endProvided
-        ? reconcileSchedule({
-            date,
-            time,
-            duration: prev.duration,
-            endDate: eventInput.endDate !== undefined ? eventInput.endDate : prev.endDate,
-            endTime: eventInput.endTime !== undefined ? eventInput.endTime : prev.endTime,
-            timezone,
-          })
-        : reconcileSchedule({
-            date,
-            time,
-            duration: eventInput.duration ?? prev.duration,
-            endDate: null,
-            endTime: null,
-            timezone,
-          });
+      let endDate: string | null;
+      let endTime: string | null;
+      let duration: number;
+      if (endProvided) {
+        endDate = eventInput.endDate !== undefined ? eventInput.endDate : prev.endDate;
+        endTime = eventInput.endTime !== undefined ? eventInput.endTime : prev.endTime;
+        // Partial end edits (one of the two fields, no fallback available) are
+        // rejected so the client knows the value didn't land instead of being
+        // silently coerced via the duration fallback.
+        const hasEnd = endDate !== null && endTime !== null;
+        const clearedEnd = endDate === null && endTime === null;
+        if (!hasEnd && !clearedEnd) {
+          throw new EventEndIncompleteError();
+        }
+        duration = prev.duration;
+      } else {
+        // No end fields in this PATCH. Preserve any explicit end the user
+        // previously saved — reconcileSchedule will recompute duration from
+        // (start, end) so the stored pair stays consistent. Only when there is
+        // no prior explicit end do we re-derive end from the duration field.
+        endDate = prev.endDate;
+        endTime = prev.endTime;
+        duration = eventInput.duration ?? prev.duration;
+      }
+      const schedule = reconcileSchedule({ date, time, duration, endDate, endTime, timezone });
       patch.duration = schedule.duration;
       patch.endDate = schedule.endDate;
       patch.endTime = schedule.endTime;
     }
   }
 
-  // Review: reassigning a reviewer (re)starts review; clearing it removes the gate.
+  // Review state transitions:
+  //  - assigning a new non-null reviewer (or swapping to a different one): start
+  //    a fresh review — pending status, clear prior note/timestamp, notify.
+  //  - clearing the reviewer (X → null): drop the publish gate (reviewStatus =
+  //    "none") but PRESERVE the reviewNote/reviewedAt as history. This keeps
+  //    the UI's "Require approval" toggle from silently nuking reviewer
+  //    feedback when it round-trips null → same reviewer.
+  //  - no change: leave everything alone.
   let notifyNewReviewer: string | null = null;
   if (prev && eventInput.reviewerId !== undefined && eventInput.reviewerId !== prev.reviewerId) {
-    patch.reviewStatus = eventInput.reviewerId ? "pending" : "none";
-    patch.reviewNote = null;
-    patch.reviewedAt = null;
-    notifyNewReviewer = eventInput.reviewerId;
+    if (eventInput.reviewerId) {
+      patch.reviewStatus = "pending";
+      patch.reviewNote = null;
+      patch.reviewedAt = null;
+      notifyNewReviewer = eventInput.reviewerId;
+    } else {
+      patch.reviewStatus = "none";
+    }
   }
 
   // Publish gate: an event with an assigned reviewer can't be published until approved.
@@ -585,6 +613,9 @@ export async function duplicateEvent(
     locationLng: source.locationLng,
     status: source.status,
     visibility: "unpublished",
+    // Inherit the source's video setup so a duplicated Zoom event still gets
+    // a meeting attached on create.
+    videoProvider: source.video?.provider === "zoom" ? "zoom" : null,
     recurring: source.recurring,
     recurrenceFrequency: source.recurrenceFrequency,
     recurrenceDays: source.recurrenceDays,
@@ -595,8 +626,11 @@ export async function duplicateEvent(
   });
 }
 
-function canReview(actorRole: string, actorUserId: string, reviewerId: string | null): boolean {
-  return actorRole === "owner" || actorRole === "admin" || actorUserId === reviewerId;
+// Strict: only the user explicitly assigned as reviewer can approve or reject.
+// No owner/admin override — admins can still reassign the reviewer via PATCH if
+// they need to unblock a stalled review.
+function canReview(actorUserId: string, reviewerId: string | null): boolean {
+  return reviewerId !== null && actorUserId === reviewerId;
 }
 
 async function loadEventRow(orgId: string, eventId: string) {
@@ -636,11 +670,10 @@ export async function approveEvent(
   orgId: string,
   eventId: string,
   actorUserId: string,
-  actorRole: string,
 ): Promise<EventDto | "forbidden" | null> {
   const ev = await loadEventRow(orgId, eventId);
   if (!ev) return null;
-  if (!canReview(actorRole, actorUserId, ev.reviewerId)) return "forbidden";
+  if (!canReview(actorUserId, ev.reviewerId)) return "forbidden";
   await db
     .update(events)
     .set({
@@ -674,12 +707,11 @@ export async function rejectEvent(
   orgId: string,
   eventId: string,
   actorUserId: string,
-  actorRole: string,
   note: string | null,
 ): Promise<EventDto | "forbidden" | null> {
   const ev = await loadEventRow(orgId, eventId);
   if (!ev) return null;
-  if (!canReview(actorRole, actorUserId, ev.reviewerId)) return "forbidden";
+  if (!canReview(actorUserId, ev.reviewerId)) return "forbidden";
   await db
     .update(events)
     .set({

@@ -140,13 +140,23 @@ async function fetchPricing(polar: Polar, productId: string): Promise<PlanPricin
 export async function getTeamPricing(): Promise<PlanPricingResponse> {
   if (pricingCache && pricingCache.expiresAt > Date.now()) return pricingCache.value;
   const polar = getPolarClient();
-  const value: PlanPricingResponse = polar
-    ? {
-        monthly: await fetchPricing(polar, TEAM_PRODUCT_ID),
-        annual: await fetchPricing(polar, TEAM_PRODUCT_ANNUAL_ID),
-      }
-    : { monthly: null, annual: null };
-  pricingCache = { value, expiresAt: Date.now() + PRICING_TTL_MS };
+  if (!polar) {
+    // No Polar configured at all — stable null result is fine to cache.
+    const value: PlanPricingResponse = { monthly: null, annual: null };
+    pricingCache = { value, expiresAt: Date.now() + PRICING_TTL_MS };
+    return value;
+  }
+  // Fetch both in parallel; no data dependency.
+  const [monthly, annual] = await Promise.all([
+    fetchPricing(polar, TEAM_PRODUCT_ID),
+    fetchPricing(polar, TEAM_PRODUCT_ANNUAL_ID),
+  ]);
+  const value: PlanPricingResponse = { monthly, annual };
+  // Don't poison the cache for an hour on a transient Polar failure. If either
+  // tier failed to resolve, skip caching so the next request retries.
+  if (monthly !== null && annual !== null) {
+    pricingCache = { value, expiresAt: Date.now() + PRICING_TTL_MS };
+  }
   return value;
 }
 

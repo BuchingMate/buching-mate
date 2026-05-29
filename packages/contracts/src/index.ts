@@ -539,7 +539,9 @@ export interface CreateEventRequest {
   status?: EventStatus;
   visibility?: EventVisibility;
   reviewerId?: string | null;
-  videoProvider?: "zoom" | null;
+  // Required on create: authoritative signal for whether the event is a Zoom
+  // meeting. Send `null` for non-video events; older callers must be updated.
+  videoProvider: "zoom" | null;
   recurring?: boolean;
   recurrenceFrequency?: string | null;
   recurrenceDays?: string[];

@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { apiError } from "./errors";
 import type { ApiEnv } from "./types";
 import { requireAuth } from "../middleware/auth";
+import { rateLimit } from "../middleware/rate-limit";
 import { GOOGLE_MAPS_API_KEY } from "../env";
 
 // Server-side proxy for Google Places (New) so the API key never reaches the
@@ -18,9 +19,28 @@ interface Suggestion {
   secondary: string;
 }
 
+// Per-user rate limits guard our Google Places billing. Autocomplete fires per
+// keystroke (debounced client-side) so it gets a larger budget than /place,
+// which is hit only on a suggestion click.
+const autocompleteLimit = rateLimit({
+  key: (c) => c.var.user?.id ?? null,
+  capacity: 30,
+  refillPerSec: 30 / 60,
+  errorCode: "geo_rate_limited",
+  errorMessage: "Too many address lookups — please slow down",
+});
+
+const placeLimit = rateLimit({
+  key: (c) => c.var.user?.id ?? null,
+  capacity: 15,
+  refillPerSec: 15 / 60,
+  errorCode: "geo_rate_limited",
+  errorMessage: "Too many address lookups — please slow down",
+});
+
 export const geoRoutes = new Hono<ApiEnv>()
   .use("*", requireAuth)
-  .get("/autocomplete", async (c) => {
+  .get("/autocomplete", autocompleteLimit, async (c) => {
     const q = c.req.query("q")?.trim() ?? "";
     const session = c.req.query("session") ?? "";
     if (!GOOGLE_MAPS_API_KEY || q.length < 3) {
@@ -54,7 +74,7 @@ export const geoRoutes = new Hono<ApiEnv>()
       }));
     return c.json({ suggestions });
   })
-  .get("/place", async (c) => {
+  .get("/place", placeLimit, async (c) => {
     const placeId = c.req.query("placeId")?.trim() ?? "";
     const session = c.req.query("session") ?? "";
     if (!GOOGLE_MAPS_API_KEY || !placeId) {

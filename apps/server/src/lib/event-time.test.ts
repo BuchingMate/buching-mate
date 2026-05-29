@@ -43,6 +43,31 @@ describe("event-time", () => {
     });
   });
 
+  test("midnight in UTC", () => {
+    expect(eventStartUtc("2026-05-24", "00:00", "UTC").toISOString()).toBe(
+      "2026-05-24T00:00:00.000Z",
+    );
+    expect(utcToZonedWallClock(new Date("2026-05-24T00:00:00.000Z"), "UTC")).toEqual({
+      date: "2026-05-24",
+      time: "00:00",
+    });
+  });
+
+  test("midnight round-trip in America/New_York (across DST start)", () => {
+    // 2026-03-08 02:00 EST -> EDT skip. Midnight before/after the transition
+    // should round-trip without a day drift.
+    const before = zonedWallClockToUtc("2026-03-07", "00:00", "America/New_York");
+    expect(utcToZonedWallClock(before, "America/New_York")).toEqual({
+      date: "2026-03-07",
+      time: "00:00",
+    });
+    const after = zonedWallClockToUtc("2026-03-09", "00:00", "America/New_York");
+    expect(utcToZonedWallClock(after, "America/New_York")).toEqual({
+      date: "2026-03-09",
+      time: "00:00",
+    });
+  });
+
   test("durationMinutes computes minute delta with a 1-minute floor", () => {
     const start = eventStartUtc("2026-05-24", "18:00", "UTC");
     const end = eventStartUtc("2026-05-24", "19:30", "UTC");

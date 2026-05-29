@@ -15,6 +15,7 @@ import {
   createEvent,
   deleteEvent,
   duplicateEvent,
+  EventEndIncompleteError,
   EventReviewRequiredError,
   EventReviewerInvalidError,
   getEvent,
@@ -156,7 +157,10 @@ function parseEvent(
     parsed.visibility = input.visibility;
   }
 
-  if (input.videoProvider !== undefined) {
+  // videoProvider is authoritative for Zoom attach/detach. On create it's
+  // required so old clients can't accidentally publish events that silently
+  // skip the meeting attach (previous behavior auto-attached on publish).
+  if (!partial || input.videoProvider !== undefined) {
     if (input.videoProvider !== null && input.videoProvider !== "zoom") {
       return "videoProvider must be 'zoom' or null";
     }
@@ -275,6 +279,9 @@ export const eventRoutes = new Hono<ApiEnv>()
       if (err instanceof EventReviewerInvalidError) {
         return apiError(c, 400, "invalid_reviewer", err.message);
       }
+      if (err instanceof EventEndIncompleteError) {
+        return apiError(c, 400, "invalid_end", err.message);
+      }
       throw err;
     }
   })
@@ -311,30 +318,22 @@ export const eventRoutes = new Hono<ApiEnv>()
       throw err;
     }
   })
-  .post("/:eventId/approve", requireRole("manager"), async (c) => {
-    const event = await approveEvent(
-      c.var.orgId,
-      c.req.param("eventId"),
-      c.var.user.id,
-      c.var.memberRole,
-    );
+  // Only the assigned reviewer can approve or reject. No role gate: a viewer
+  // assigned as reviewer must be able to act; an admin who isn't the reviewer
+  // must not.
+  .post("/:eventId/approve", async (c) => {
+    const event = await approveEvent(c.var.orgId, c.req.param("eventId"), c.var.user.id);
     if (event === "forbidden")
       return apiError(c, 403, "not_reviewer", "Only the assigned reviewer can approve");
     if (!event) return apiError(c, 404, "event_not_found", "Event not found");
     return c.json({ event });
   })
-  .post("/:eventId/reject", requireRole("manager"), async (c) => {
+  .post("/:eventId/reject", async (c) => {
     const body = await readJson(c);
     const note = isRecord(body) ? stringOrNull(body.note) : null;
     if (note === undefined)
       return apiError(c, 400, "invalid_review", "note must be a string or null");
-    const event = await rejectEvent(
-      c.var.orgId,
-      c.req.param("eventId"),
-      c.var.user.id,
-      c.var.memberRole,
-      note,
-    );
+    const event = await rejectEvent(c.var.orgId, c.req.param("eventId"), c.var.user.id, note);
     if (event === "forbidden")
       return apiError(c, 403, "not_reviewer", "Only the assigned reviewer can reject");
     if (!event) return apiError(c, 404, "event_not_found", "Event not found");

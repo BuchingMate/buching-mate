@@ -25,7 +25,7 @@ const baseEventFormSchema = z.object({
   location: z.string(),
   locationLat: z.string(),
   locationLng: z.string(),
-  price: z.string().regex(/^(\d+(\.\d{1,2})?)?$/, "Price must look like 0.00"),
+  price: z.string().regex(/^\d+(\.\d{1,2})?$/, "Price must look like 0.00"),
   recurring: z.enum(["true", "false"]),
   recurrenceFrequency: z.string(),
   recurrenceInterval: z.string().regex(/^\d*$/, "Interval must be a whole number"),
