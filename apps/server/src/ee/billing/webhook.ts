@@ -131,7 +131,13 @@ async function upsertSubscription(orgId: string, sub: PolarSubscriptionPayload) 
         .where(eq(polarSubscriptions.orgId, orgId));
     }
 
-    await tx.update(orgSettings).set({ plan, updatedAt: now }).where(eq(orgSettings.orgId, orgId));
+    await tx
+      .insert(orgSettings)
+      .values({ orgId, plan })
+      .onConflictDoUpdate({
+        target: orgSettings.orgId,
+        set: { plan, updatedAt: now },
+      });
   });
 
   // Reconcile the Polar seat quantity now that the plan/status row is committed:

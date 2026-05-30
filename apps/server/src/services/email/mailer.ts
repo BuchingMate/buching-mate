@@ -108,13 +108,6 @@ export interface SendTenantEmailInput {
   attachments?: TenantEmailAttachment[];
 }
 
-export class EmailSendingSuspendedError extends Error {
-  constructor(public orgId: string) {
-    super(`Sending suspended for org ${orgId}`);
-    this.name = "EmailSendingSuspendedError";
-  }
-}
-
 // Check the auto-suspend flag set by the Resend webhook handler when an org's
 // complaint rate crosses threshold. Refuse to call Resend until an operator
 // clears the flag (see docs/internal/security.md).
@@ -144,7 +137,7 @@ export async function sendTenantEmail(input: SendTenantEmailInput): Promise<void
       { orgId: input.orgId, kind: input.kind, to: input.to },
       "tenant email blocked: sending suspended",
     );
-    throw new EmailSendingSuspendedError(input.orgId);
+    return;
   }
 
   const sender = await resolveSender(input.orgId);

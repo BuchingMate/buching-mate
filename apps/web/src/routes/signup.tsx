@@ -90,6 +90,7 @@ function Signup() {
           name,
           email,
           password,
+          callbackURL: `${window.location.origin}/onboarding`,
         },
         {
           headers: captchaToken ? { "x-captcha-response": captchaToken } : undefined,

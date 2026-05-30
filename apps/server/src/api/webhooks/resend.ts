@@ -101,7 +101,13 @@ async function maybeSuspendOrg(orgId: string): Promise<void> {
   if (sends < MIN_SENDS_FOR_SUSPENSION) return;
   if (complaints / sends <= COMPLAINT_RATE_THRESHOLD) return;
 
-  await db.update(orgSettings).set({ sendingSuspended: true }).where(eq(orgSettings.orgId, orgId));
+  await db
+    .insert(orgSettings)
+    .values({ orgId, sendingSuspended: true })
+    .onConflictDoUpdate({
+      target: orgSettings.orgId,
+      set: { sendingSuspended: true },
+    });
 
   getLogger().warn(
     { orgId, sends, complaints, rate: complaints / sends },
