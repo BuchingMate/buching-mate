@@ -23,6 +23,7 @@
     "@dnd-kit/react": "^0.4.0",
     "@fontsource-variable/instrument-sans": "^5.2.8",
     "@fontsource-variable/inter": "^5.2.8",
+    "@marsidev/react-turnstile": "^1.5.2",
     "@polar-sh/better-auth": "^1.8.4",
     "@tanstack/react-form": "^1.0.0",
     "@tanstack/react-hotkeys": "^0.1.0",

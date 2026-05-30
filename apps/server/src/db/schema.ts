@@ -129,6 +129,10 @@ export const orgSettings = pgTable(
     // signed. Caps membership and is the reconcile target that reverts customer seat
     // edits in the Polar portal. Null means uncapped (no contract limit set).
     enterpriseSeatLimit: integer("enterprise_seat_limit"),
+    // Flipped true by the Resend webhook handler when complaint rate crosses
+    // threshold. sendTenantEmail refuses to call Resend while this is true.
+    // Operator clears via Drizzle Studio after reviewing.
+    sendingSuspended: boolean("sending_suspended").notNull().default(false),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
@@ -457,6 +461,29 @@ export const paypalPaymentAccounts = pgTable(
   (table) => [
     uniqueIndex("paypal_payment_accounts_connection_idx").on(table.connectionId),
     uniqueIndex("paypal_payment_accounts_tracking_idx").on(table.trackingId),
+  ],
+);
+
+export const emailEvent = pgTable(
+  "email_event",
+  {
+    id: id(),
+    // Nullable: platform mail (verify, password reset) is sent without an
+    // org_id tag, so the webhook event lands with orgId=null.
+    orgId: text("org_id").references(() => organization.id, { onDelete: "cascade" }),
+    resendEmailId: text("resend_email_id").notNull(),
+    // sent | bounced | complained | delivery_delayed
+    eventType: text("event_type").notNull(),
+    // invite | review-requested | review-approved | review-rejected | booking-resume
+    // | booking-confirmed | event-reminder | null (platform)
+    kind: text("kind"),
+    toEmail: text("to_email").notNull(),
+    payload: jsonb("payload").$type<Record<string, unknown>>().notNull(),
+    receivedAt: timestamp("received_at").notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("email_event_unique_idx").on(table.resendEmailId, table.eventType),
+    index("email_event_org_received_idx").on(table.orgId, table.receivedAt),
   ],
 );
 

@@ -33,6 +33,7 @@ export async function sendEventReviewRequestedEmail(input: {
 <div style="margin:20px 0 0 0;">${button(input.eventUrl, "Review event")}</div>`;
   await sendTenantEmail({
     orgId: input.orgId,
+    kind: "review-requested",
     to: input.to,
     subject: `Review requested: ${input.eventTitle}`,
     html: shell(body),
@@ -51,6 +52,7 @@ export async function sendEventReviewApprovedEmail(input: {
 <div style="margin:20px 0 0 0;">${button(input.eventUrl, "Open event")}</div>`;
   await sendTenantEmail({
     orgId: input.orgId,
+    kind: "review-approved",
     to: input.to,
     subject: `Approved: ${input.eventTitle}`,
     html: shell(body),
@@ -74,6 +76,7 @@ ${noteRow}
 <div style="margin:20px 0 0 0;">${button(input.eventUrl, "Edit event")}</div>`;
   await sendTenantEmail({
     orgId: input.orgId,
+    kind: "review-rejected",
     to: input.to,
     subject: `Changes requested: ${input.eventTitle}`,
     html: shell(body),

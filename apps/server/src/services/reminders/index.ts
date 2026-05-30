@@ -130,6 +130,7 @@ async function sendReminder(input: {
   });
   await sendTenantEmail({
     orgId: input.orgId,
+    kind: "event-reminder",
     to: input.to,
     subject:
       input.kind === "t24h"

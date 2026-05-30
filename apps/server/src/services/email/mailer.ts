@@ -85,12 +85,46 @@ export interface TenantEmailAttachment {
   content: string;
 }
 
+// Categorises every tenant-triggered send. Surfaces as a Resend tag so the
+// webhook can attribute bounces/complaints to a specific surface (e.g. invite
+// vs broadcast) when triaging a reputation issue. Values are ASCII
+// alphanumerics + "-" so they satisfy Resend's tag-value constraints.
+export type TenantEmailKind =
+  | "invite"
+  | "review-requested"
+  | "review-approved"
+  | "review-rejected"
+  | "booking-resume"
+  | "booking-confirmed"
+  | "event-reminder"
+  | "broadcast";
+
 export interface SendTenantEmailInput {
   orgId: string;
+  kind: TenantEmailKind;
   to: string;
   subject: string;
   html: string;
   attachments?: TenantEmailAttachment[];
+}
+
+export class EmailSendingSuspendedError extends Error {
+  constructor(public orgId: string) {
+    super(`Sending suspended for org ${orgId}`);
+    this.name = "EmailSendingSuspendedError";
+  }
+}
+
+// Check the auto-suspend flag set by the Resend webhook handler when an org's
+// complaint rate crosses threshold. Refuse to call Resend until an operator
+// clears the flag (see docs/internal/security.md).
+async function isSendingSuspended(orgId: string): Promise<boolean> {
+  const rows = await db
+    .select({ suspended: orgSettings.sendingSuspended })
+    .from(orgSettings)
+    .where(eq(orgSettings.orgId, orgId))
+    .limit(1);
+  return Boolean(rows[0]?.suspended);
 }
 
 // Send one transactional email for an org. Resolves the org's sender, then
@@ -99,10 +133,18 @@ export interface SendTenantEmailInput {
 export async function sendTenantEmail(input: SendTenantEmailInput): Promise<void> {
   if (!isConfigured()) {
     getLogger().info(
-      { orgId: input.orgId, to: input.to, subject: input.subject },
+      { orgId: input.orgId, kind: input.kind, to: input.to, subject: input.subject },
       "dev tenant email",
     );
     return;
+  }
+
+  if (await isSendingSuspended(input.orgId)) {
+    getLogger().warn(
+      { orgId: input.orgId, kind: input.kind, to: input.to },
+      "tenant email blocked: sending suspended",
+    );
+    throw new EmailSendingSuspendedError(input.orgId);
   }
 
   const sender = await resolveSender(input.orgId);
@@ -114,6 +156,12 @@ export async function sendTenantEmail(input: SendTenantEmailInput): Promise<void
       subject: input.subject,
       html: input.html,
       attachments: input.attachments,
+      // Carried into the Resend webhook payload so the handler can attribute
+      // bounces/complaints to the originating org + surface.
+      tags: [
+        { name: "org_id", value: input.orgId },
+        { name: "kind", value: input.kind },
+      ],
     });
   } catch (err) {
     getLogger().warn({ err, orgId: input.orgId, to: input.to }, "tenant email send failed");
@@ -173,6 +221,14 @@ export async function sendBroadcastEmails(input: {
   const client = getResendClient();
   if (!client) return { sent: [], failed: [...input.recipients] };
 
+  if (await isSendingSuspended(input.orgId)) {
+    getLogger().warn(
+      { orgId: input.orgId, count: input.recipients.length },
+      "broadcast blocked: sending suspended",
+    );
+    return { sent: [], failed: [...input.recipients] };
+  }
+
   const sender = await resolveSender(input.orgId);
   const sent: string[] = [];
   const failed: string[] = [];
@@ -187,6 +243,10 @@ export async function sendBroadcastEmails(input: {
           ...(sender.replyTo ? { replyTo: sender.replyTo } : {}),
           subject: input.subject,
           html: input.html,
+          tags: [
+            { name: "org_id", value: input.orgId },
+            { name: "kind", value: "broadcast" },
+          ],
         })),
       );
       if (error) {

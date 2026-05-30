@@ -13,6 +13,7 @@ import { getPublicRequestInfo } from "@/lib/public";
 import { attendeeSessionQueryOptions, authKeys, sessionQueryOptions } from "@/queries/auth";
 import { pageHead } from "@/lib/seo";
 import { emailDomainHint, isEmailDomainAllowed } from "@/lib/email-domain";
+import { TurnstileWidget, turnstileEnabled } from "@/components/turnstile-widget";
 
 export const Route = createFileRoute("/login")({
   component: Login,
@@ -53,6 +54,22 @@ function StaffLogin() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [passkeyLoading, setPasskeyLoading] = useState(false);
+  const [captchaToken, setCaptchaToken] = useState("");
+  const [needsVerify, setNeedsVerify] = useState(false);
+  const [resendState, setResendState] = useState<"idle" | "sending" | "sent" | "error">("idle");
+
+  const handleResendVerification = async () => {
+    setResendState("sending");
+    try {
+      const result = await authClient.sendVerificationEmail({
+        email,
+        callbackURL: `${window.location.origin}/admin`,
+      });
+      setResendState(result.error ? "error" : "sent");
+    } catch {
+      setResendState("error");
+    }
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -74,19 +91,36 @@ function StaffLogin() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
+    setNeedsVerify(false);
+    setResendState("idle");
 
     if (!isEmailDomainAllowed(email)) {
       setError(emailDomainHint() ?? "Email domain not allowed");
       return;
     }
 
+    if (turnstileEnabled && !captchaToken) {
+      setError("Please complete the captcha");
+      return;
+    }
+
     setLoading(true);
 
     try {
-      const result = await authClient.signIn.email({ email, password });
+      const result = await authClient.signIn.email(
+        { email, password },
+        {
+          headers: captchaToken ? { "x-captcha-response": captchaToken } : undefined,
+        },
+      );
 
       if (result.error) {
-        setError(result.error.message ?? "Unable to sign in");
+        const code = result.error.code ?? "";
+        const msg = result.error.message ?? "Unable to sign in";
+        if (code === "EMAIL_NOT_VERIFIED" || /verif/i.test(msg)) {
+          setNeedsVerify(true);
+        }
+        setError(msg);
         return;
       }
 
@@ -165,10 +199,30 @@ function StaffLogin() {
             />
           </div>
 
+          <TurnstileWidget onToken={setCaptchaToken} />
+
           {error && (
             <Alert variant="destructive">
               <AlertDescription>{error}</AlertDescription>
             </Alert>
+          )}
+
+          {needsVerify && (
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full"
+              onClick={handleResendVerification}
+              disabled={resendState === "sending" || resendState === "sent"}
+            >
+              {resendState === "sending"
+                ? "Resending..."
+                : resendState === "sent"
+                  ? "Email resent"
+                  : resendState === "error"
+                    ? "Retry resend"
+                    : "Resend verification email"}
+            </Button>
           )}
 
           <Button type="submit" className="w-full" disabled={loading}>

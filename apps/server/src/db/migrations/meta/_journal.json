@@ -127,6 +127,13 @@
       "when": 1779827471199,
       "tag": "0017_tough_star_brand",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1780143910210,
+      "tag": "0018_free_stryfe",
+      "breakpoints": true
     }
   ]
 }

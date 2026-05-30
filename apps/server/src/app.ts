@@ -18,6 +18,7 @@ import { registrationRoutes } from "./api/registrations";
 import { resourceRoutes } from "./api/resources";
 import { videoRoutes } from "./api/video";
 import { webhookRoutes } from "./api/webhooks";
+import { resendWebhookRoutes } from "./api/webhooks/resend";
 import { PUBLIC_HOST_SUFFIXES, WEB_URL } from "./env";
 
 const webOrigin = WEB_URL;
@@ -50,7 +51,7 @@ export function createApp() {
     "*",
     cors({
       origin: resolveOrigin,
-      allowHeaders: ["Content-Type", "Authorization", "X-Org-Id"],
+      allowHeaders: ["Content-Type", "Authorization", "X-Org-Id", "X-Captcha-Response"],
       allowMethods: ["POST", "GET", "PATCH", "PUT", "DELETE", "OPTIONS"],
       exposeHeaders: ["Content-Length"],
       maxAge: 600,
@@ -75,6 +76,7 @@ export function createApp() {
   app.route("/api/payments", paymentRoutes);
   app.route("/api/billing", billingRoutes);
   app.route("/api/video", videoRoutes);
+  app.route("/api/webhooks/resend", resendWebhookRoutes);
   app.route("/api/webhooks", webhookRoutes);
   app.route("/api/public", publicRoutes);
 

@@ -1,6 +1,6 @@
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
-import { organization, twoFactor } from "better-auth/plugins";
+import { captcha, organization, twoFactor } from "better-auth/plugins";
 import { passkey } from "@better-auth/passkey";
 import { polar, checkout, portal, webhooks } from "@polar-sh/better-auth";
 import { Polar } from "@polar-sh/sdk";
@@ -9,7 +9,9 @@ import { db } from "./db";
 import * as schema from "./db/schema";
 import { member, orgSettings } from "./db/schema";
 import { ac, owner, admin, manager, viewer } from "./auth/permissions";
-import { sendInviteEmail } from "./auth/email";
+import { sendInviteEmail, sendVerifyEmail } from "./auth/email";
+import { isDisposableEmail } from "./auth/disposable";
+import { sanitizeOrgName } from "./auth/org-name";
 import {
   handleSubscriptionActive,
   handleSubscriptionCanceled,
@@ -75,6 +77,12 @@ const organizationPlugin = organization({
   ac,
   roles: { owner, admin, manager, viewer },
   organizationHooks: {
+    beforeCreateOrganization: async ({ organization: org }) => {
+      // Tenant-controlled string lands in outbound invite email subject; reject
+      // URLs, length-cap, strip zero-width/RTL tricks.
+      const cleanName = sanitizeOrgName(org.name ?? "");
+      return { data: { ...org, name: cleanName } };
+    },
     beforeAddMember: async ({ member: memberData, user }) => {
       const existing = await db.select().from(member).where(eq(member.userId, user.id));
       if (existing.length > 0) {
@@ -83,7 +91,14 @@ const organizationPlugin = organization({
       await assertSeatAvailableForRole(memberData.organizationId, memberData.role);
       return { data: memberData };
     },
-    beforeCreateInvitation: async ({ invitation }) => {
+    beforeCreateInvitation: async ({ invitation, inviter }) => {
+      // Belt + braces on the email-verification gate: even if a session ever
+      // reaches this endpoint without a verified address (rollback of the
+      // global flag, future auth path, manually created user), refuse to mail
+      // strangers from our verified domain.
+      if (!inviter.emailVerified) {
+        throw new Error("Verify your email before inviting others");
+      }
       // Surface the seat limit at invite time so the inviter gets immediate feedback.
       // Seats are only truly reserved at acceptance (beforeAcceptInvitation), so this
       // is best-effort UX: it blocks the obvious over-invite, not concurrent pending ones.
@@ -97,6 +112,14 @@ const organizationPlugin = organization({
       }
     },
     beforeUpdateOrganization: async ({ organization: org, member: memberData }) => {
+      if ("name" in org && typeof org.name === "string") {
+        // Re-apply the same sanitization on rename so an attacker can't slip a
+        // phishing payload past us by editing after creation.
+        const cleanName = sanitizeOrgName(org.name);
+        if (cleanName !== org.name) {
+          (org as { name: string }).name = cleanName;
+        }
+      }
       if (!("slug" in org) || org.slug === undefined) return;
       const plan = await orgPlanFor(memberData.organizationId);
       if (plan === "free") {
@@ -156,6 +179,17 @@ const polarPlugin = polarClient
     })
   : null;
 
+const turnstileSecret = process.env.TURNSTILE_SECRET_KEY;
+const captchaPlugin = turnstileSecret
+  ? captcha({
+      provider: "cloudflare-turnstile",
+      secretKey: turnstileSecret,
+      // Defaults cover /sign-up/email, /sign-in/email, /request-password-reset.
+      // Plugin reads token from the x-captcha-response header on these endpoints
+      // and rejects with 403 on missing/invalid.
+    })
+  : null;
+
 const authPlugins = [
   organizationPlugin,
   twoFactor(),
@@ -163,6 +197,7 @@ const authPlugins = [
     rpID: passkeyRpId(),
     rpName: Bun.env.VITE_BUSINESS_NAME ?? Bun.env.BUSINESS_NAME ?? "BuchingMate",
   }),
+  ...(captchaPlugin ? [captchaPlugin] : []),
   ...(polarPlugin ? [polarPlugin] : []),
 ];
 
@@ -177,6 +212,17 @@ export const auth = betterAuth({
   trustedOrigins: TRUSTED_ORIGINS,
   emailAndPassword: {
     enabled: true,
+    // Without this flag, a fresh account can sign in immediately and reach the
+    // invite endpoint — same primitive the Kaneo phishing attack used. Pair
+    // with the inviter.emailVerified check in beforeCreateInvitation.
+    requireEmailVerification: true,
+  },
+  emailVerification: {
+    sendOnSignUp: true,
+    autoSignInAfterVerification: true,
+    sendVerificationEmail: async ({ user, url }) => {
+      await sendVerifyEmail({ email: user.email, verifyLink: url });
+    },
   },
   socialProviders: googleProvider,
   databaseHooks: {
@@ -187,6 +233,9 @@ export const auth = betterAuth({
             throw new Error(
               `Email domain not allowed. Permitted: ${allowedEmailDomains.join(", ")}`,
             );
+          }
+          if (isDisposableEmail(user.email)) {
+            throw new Error("Please use a permanent email address");
           }
           return { data: user };
         },
