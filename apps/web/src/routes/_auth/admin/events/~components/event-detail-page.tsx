@@ -1,11 +1,12 @@
 import { Link } from "@tanstack/react-router";
-import { useQuery, useSuspenseQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { Plus } from "lucide-react";
 import { EmptyState } from "@/components/empty-state";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Textarea } from "@/components/ui/textarea";
 import { getCurrentOrg } from "@/lib/org";
 import {
   AppShell,
@@ -14,20 +15,22 @@ import {
   PageBreadcrumbCurrent,
   PageBreadcrumbSeparator,
 } from "@/components/app-shell";
-import { eventToForm } from "@/lib/events";
-import { eventQueryOptions } from "@/queries/events";
+import { approveEvent, eventToForm, rejectEvent } from "@/lib/events";
+import { eventKeys, eventQueryOptions } from "@/queries/events";
 import { eventRegistrationsQueryOptions } from "@/queries/registrations";
 import { attendeesQueryOptions } from "@/queries/attendees";
 import { eventResourcesQueryOptions, resourcesQueryOptions } from "@/queries/resources";
 import { canDeleteEvents, canManageEvents } from "@/lib/permissions";
 import { getOrgPublicUrl } from "@/lib/public";
 import { useUpdateEvent } from "@/hooks/use-events";
+import { useOrgCurrency } from "@/hooks/use-org";
 import { useReplaceEventResources } from "@/hooks/use-resources";
 import { RegistrationsTable } from "./registrations-table";
 import { RegistrationSummary } from "./registration-summary";
 import { EventResourcesTab } from "./event-resources-tab";
 import { AddRegistrationDialog } from "./event-detail/add-registration-dialog";
 import { EventDetailsForm } from "./event-detail/event-details-form";
+import { useEventLocationContext } from "./use-event-location-context";
 import { EventHeaderActions } from "./event-detail/event-header-actions";
 import { useEventDetailsForm } from "./event-detail/use-event-details-form";
 
@@ -38,6 +41,7 @@ export function EventDetailPage({
   eventId: string;
   orgContext: Awaited<ReturnType<typeof getCurrentOrg>>;
 }) {
+  const currency = useOrgCurrency();
   const canManage = canManageEvents(orgContext.memberRole);
   const canDelete = canDeleteEvents(orgContext.memberRole);
   const [error, setError] = useState("");
@@ -64,18 +68,38 @@ export function EventDetailPage({
 
   const saveMutation = useUpdateEvent(eventId);
   const replaceResourcesMutation = useReplaceEventResources(eventId);
+  const queryClient = useQueryClient();
+  const [reviewNote, setReviewNote] = useState("");
+
+  const reviewMutation = useMutation({
+    mutationFn: (action: "approve" | "reject") =>
+      action === "approve"
+        ? approveEvent(eventId)
+        : rejectEvent(eventId, reviewNote.trim() || null),
+    onSuccess: async () => {
+      setReviewNote("");
+      await queryClient.invalidateQueries({ queryKey: eventKeys.detail(eventId) });
+    },
+    onError: (err) => setError(err instanceof Error ? err.message : "Unable to update review"),
+  });
 
   const form = useEventDetailsForm({ event, saveMutation, onError: setError });
 
   useEffect(() => {
-    form.reset(eventToForm(event));
+    form.reset(eventToForm(event, currency));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [event.id]);
+
+  const orgSlug = orgContext.org.slug;
+  const { recentLocations, zoomConnected, connectZoom } = useEventLocationContext({
+    orgSlug,
+    excludeEventId: eventId,
+  });
 
   const allResources = resourcesData?.resources ?? [];
   const assignedResources = eventResourcesData?.resources ?? [];
   const resourceById = new Map(allResources.map((r) => [r.id, r]));
-  const orgSlug = orgContext.org.slug;
+
   const publicEventUrl = orgSlug ? getOrgPublicUrl(orgSlug, `/events/${event.id}`) : null;
   const registrations = registrationsData?.registrations ?? [];
   const attendees = attendeesData?.attendees ?? [];
@@ -121,7 +145,57 @@ export function EventDetailPage({
           </Alert>
         )}
 
-        {event.visibility !== "published" && (
+        {event.reviewStatus === "approved" && (
+          <Alert>
+            <AlertDescription>Approved — this event is ready to publish.</AlertDescription>
+          </Alert>
+        )}
+
+        {event.reviewStatus === "rejected" && (
+          <Alert variant="destructive">
+            <AlertDescription>
+              Changes requested before this event can be published.
+              {event.reviewNote ? ` Reviewer note: ${event.reviewNote}` : ""}
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {event.reviewStatus === "pending" && (
+          <Alert>
+            <AlertDescription className="space-y-3">
+              <p>This event is awaiting review and cannot be published until approved.</p>
+              {canManage && (
+                <div className="space-y-2">
+                  <Textarea
+                    value={reviewNote}
+                    onChange={(e) => setReviewNote(e.target.value)}
+                    placeholder="Optional note when requesting changes"
+                    className="min-h-16 bg-background"
+                  />
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      disabled={reviewMutation.isPending}
+                      onClick={() => reviewMutation.mutate("approve")}
+                    >
+                      Approve
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={reviewMutation.isPending}
+                      onClick={() => reviewMutation.mutate("reject")}
+                    >
+                      Request changes
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {event.visibility !== "published" && event.reviewStatus !== "pending" && (
           <Alert>
             <AlertDescription>
               Publish this event to make it visible on your public booking page.
@@ -147,6 +221,9 @@ export function EventDetailPage({
               form={form}
               canManage={canManage}
               onError={setError}
+              recentLocations={recentLocations}
+              zoomConnected={zoomConnected}
+              onConnectZoom={connectZoom}
             />
           </TabsContent>
 

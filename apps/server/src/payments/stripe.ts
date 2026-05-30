@@ -58,6 +58,12 @@ export function createStripeAdapter(): PaymentProviderAdapter {
   return {
     provider: "stripe",
 
+    // DESIGN DECISION: we use Connect OAuth (Standard accounts), NOT the Accounts v2
+    // API. Organizations own their own Stripe account — they connect an existing one
+    // (or create one inside Stripe's OAuth flow) and remain the merchant of record,
+    // bearing chargebacks + Stripe fees while we take only an application_fee on
+    // direct charges. Accounts v2 cannot link a merchant-owned account (it only
+    // provisions platform-controlled accounts), so do not migrate to it.
     buildOnboardingUrl({ state, redirectUri }) {
       const { clientId } = requireStripeEnv();
       const url = new URL("https://connect.stripe.com/oauth/authorize");
@@ -158,7 +164,7 @@ export function createStripeAdapter(): PaymentProviderAdapter {
           ...(input.name ? { name: input.name } : {}),
           metadata: {
             attendeeId: input.externalId,
-            ...(input.metadata ?? {}),
+            ...input.metadata,
           },
         },
         {

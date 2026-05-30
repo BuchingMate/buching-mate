@@ -348,6 +348,7 @@ function ContactRow({
         </Button>
         <Button
           render={<a href={actionHref} />}
+          nativeButton={false}
           variant="ghost"
           size="sm"
           className="h-7 gap-1 px-2 text-xs"

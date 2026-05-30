@@ -1,9 +1,8 @@
-import { createFileRoute, Link, redirect, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link, redirect } from "@tanstack/react-router";
 import { useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
 import { EyeIcon, EyeOffIcon } from "lucide-react";
 import { authClient } from "@/lib/auth-client";
-import { authKeys, sessionQueryOptions } from "@/queries/auth";
+import { sessionQueryOptions } from "@/queries/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -17,6 +16,8 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Separator } from "@/components/ui/separator";
 import { pageHead } from "@/lib/seo";
 import { emailDomainHint, isEmailDomainAllowed } from "@/lib/email-domain";
+import { TurnstileWidget, turnstileEnabled } from "@/components/turnstile-widget";
+import { ResendVerificationButton } from "@/components/resend-verification-button";
 
 export const Route = createFileRoute("/signup")({
   component: Signup,
@@ -30,8 +31,6 @@ export const Route = createFileRoute("/signup")({
 });
 
 function Signup() {
-  const navigate = useNavigate();
-  const queryClient = useQueryClient();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -40,6 +39,8 @@ function Signup() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [captchaToken, setCaptchaToken] = useState("");
+  const [submitted, setSubmitted] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -55,22 +56,32 @@ function Signup() {
       return;
     }
 
+    if (turnstileEnabled && !captchaToken) {
+      setError("Please complete the captcha");
+      return;
+    }
+
     setLoading(true);
 
     try {
-      const result = await authClient.signUp.email({
-        name,
-        email,
-        password,
-      });
+      const result = await authClient.signUp.email(
+        {
+          name,
+          email,
+          password,
+          callbackURL: `${window.location.origin}/onboarding`,
+        },
+        {
+          headers: captchaToken ? { "x-captcha-response": captchaToken } : undefined,
+        },
+      );
 
       if (result.error) {
         setError(result.error.message ?? "Unable to create account");
         return;
       }
 
-      await queryClient.invalidateQueries({ queryKey: authKeys.session });
-      await navigate({ to: "/onboarding" });
+      setSubmitted(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to create account");
     } finally {
@@ -84,6 +95,31 @@ function Signup() {
       callbackURL: `${window.location.origin}/onboarding`,
     });
   };
+
+  if (submitted) {
+    return (
+      <div className="flex min-h-svh items-center justify-center p-6">
+        <div className="w-full max-w-sm space-y-6 text-center">
+          <h1 className="text-2xl font-bold">Check your email</h1>
+          <p className="text-muted-foreground">
+            We sent a verification link to <span className="font-medium">{email}</span>. Click it to
+            finish signing up.
+          </p>
+          <ResendVerificationButton email={email} callbackPath="/onboarding" showError />
+          <p className="text-sm text-muted-foreground">
+            Wrong address?{" "}
+            <button
+              type="button"
+              className="font-medium underline"
+              onClick={() => setSubmitted(false)}
+            >
+              Go back
+            </button>
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex min-h-svh items-center justify-center p-6">
@@ -164,6 +200,8 @@ function Signup() {
               </InputGroupAddon>
             </InputGroup>
           </div>
+
+          <TurnstileWidget onToken={setCaptchaToken} />
 
           {error && (
             <Alert variant="destructive">

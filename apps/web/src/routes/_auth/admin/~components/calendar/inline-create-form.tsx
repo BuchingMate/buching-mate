@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useCreateEvent } from "@/hooks/use-events";
+import { useOrgCurrency } from "@/hooks/use-org";
 import { emptyEventForm, formToEventRequest, type EventFormState } from "@/lib/events";
 
 export interface InlineCreateFormProps {
@@ -19,6 +20,7 @@ export function InlineCreateForm({ prefill, onCreated }: InlineCreateFormProps) 
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const createMutation = useCreateEvent();
+  const currency = useOrgCurrency();
 
   useEffect(() => {
     if (!prefill) return;
@@ -41,7 +43,7 @@ export function InlineCreateForm({ prefill, onCreated }: InlineCreateFormProps) 
     setError("");
     setSuccess("");
     try {
-      const result = await createMutation.mutateAsync(formToEventRequest(form));
+      const result = await createMutation.mutateAsync(formToEventRequest(form, currency));
       onCreated(result.event);
       setSuccess(`Created “${result.event.title}”`);
       setForm({ ...emptyEventForm, date: form.date, time: "", duration: "60" });

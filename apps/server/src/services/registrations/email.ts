@@ -16,6 +16,7 @@ export async function sendBookingResumeEmail({
 }) {
   await sendTenantEmail({
     orgId,
+    kind: "booking-resume",
     to,
     subject: `Complete your booking for ${eventTitle}`,
     html: renderResumeHtml({ eventTitle, orgName, resumeUrl }),
@@ -79,6 +80,7 @@ export async function sendBookingConfirmationEmail({
 
   await sendTenantEmail({
     orgId,
+    kind: "booking-confirmed",
     to,
     subject: `Booking confirmed for ${eventTitle}`,
     html: renderConfirmationHtml({

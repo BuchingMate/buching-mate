@@ -13,8 +13,6 @@ import {
 } from "@/lib/org-email-domain";
 import { currentOrgQueryOptions } from "@/queries/auth";
 import { orgEmailDomainKeys, orgEmailDomainQueryOptions } from "@/queries/org-email-domain";
-import { EmailBrandingCard } from "./email-branding-card";
-import { BroadcastPlanCard } from "./broadcast-plan-card";
 
 const STATUS_VARIANT: Record<EmailDomainStatus, "success" | "destructive" | "outline"> = {
   active: "success",
@@ -74,8 +72,6 @@ export function EmailDomainTab() {
             </Alert>
           </CardContent>
         </Card>
-        <BroadcastPlanCard />
-        <EmailBrandingCard />
       </div>
     );
   }
@@ -177,8 +173,6 @@ export function EmailDomainTab() {
           )}
         </CardContent>
       </Card>
-      <BroadcastPlanCard />
-      <EmailBrandingCard />
     </div>
   );
 }

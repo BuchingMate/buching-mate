@@ -14,3 +14,5 @@ How to use the Buching dashboard. Audience: org owners, admins, managers, and vi
 - Managing attendees and registrations.
 - Sharing a public booking page.
 - Resources (instructors, locations, equipment).
+- Sending newsletters and invitations (broadcasts).
+- Setting up a custom email sending domain and email branding.

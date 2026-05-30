@@ -15,14 +15,22 @@ import {
 import { authClient } from "@/lib/auth-client";
 import { canInviteMembers } from "@/lib/permissions";
 import { authKeys, currentOrgQueryOptions } from "@/queries/auth";
+import { orgKeys, orgSeatUsageQueryOptions } from "@/queries/org";
 
 const INVITE_ROLES: OrgRole[] = ["admin", "manager", "viewer"];
+
+// Roles that consume a paid seat. Kept in sync with the server's SEATED_ROLES.
+const SEATED_ROLES: OrgRole[] = ["owner", "admin"];
 
 export function MembersTab({ role }: { role: OrgRole }) {
   const queryClient = useQueryClient();
   const orgQuery = useQuery(currentOrgQueryOptions);
+  const seatsQuery = useQuery(orgSeatUsageQueryOptions);
   const orgId = orgQuery.data?.org.id;
   const canInvite = canInviteMembers(role);
+
+  const seats = seatsQuery.data;
+  const seatsFull = seats != null && seats.cap != null && seats.used >= seats.cap;
 
   const [members, setMembers] = useState<any[]>([]);
   const [loaded, setLoaded] = useState(false);
@@ -68,6 +76,7 @@ export function MembersTab({ role }: { role: OrgRole }) {
       setInviteRole("manager");
       void loadMembers();
       void queryClient.invalidateQueries({ queryKey: authKeys.currentOrg });
+      void queryClient.invalidateQueries({ queryKey: orgKeys.seats() });
     }
 
     setLoading(false);
@@ -90,6 +99,13 @@ export function MembersTab({ role }: { role: OrgRole }) {
         <CardDescription>Invite teammates and manage their roles.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
+        {seats && (
+          <p className="text-xs text-muted-foreground tabular-nums">
+            {seats.cap == null
+              ? `${seats.used} admin seats used`
+              : `${seats.used} of ${seats.cap} admin seats used`}
+          </p>
+        )}
         {canInvite && (
           <form onSubmit={handleInvite} className="space-y-2">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
@@ -108,7 +124,7 @@ export function MembersTab({ role }: { role: OrgRole }) {
                 </SelectTrigger>
                 <SelectContent>
                   {INVITE_ROLES.map((r) => (
-                    <SelectItem key={r} value={r}>
+                    <SelectItem key={r} value={r} disabled={seatsFull && SEATED_ROLES.includes(r)}>
                       {r.charAt(0).toUpperCase() + r.slice(1)}
                     </SelectItem>
                   ))}
@@ -118,6 +134,12 @@ export function MembersTab({ role }: { role: OrgRole }) {
                 {loading ? "Sending…" : "Send invite"}
               </Button>
             </div>
+            {seatsFull && (
+              <p className="text-xs text-muted-foreground">
+                No admin seats left ({seats?.used} of {seats?.cap}). Manager and viewer invites are
+                always free; buy more seats to add another admin.
+              </p>
+            )}
             {error && (
               <Alert variant="destructive">
                 <AlertDescription>{error}</AlertDescription>

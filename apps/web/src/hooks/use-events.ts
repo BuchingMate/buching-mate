@@ -8,6 +8,7 @@ import {
   formToEventRequest,
 } from "@/lib/events";
 import { eventKeys } from "@/queries/events";
+import { useOrgCurrency } from "@/hooks/use-org";
 import type { UpdateEventRequest } from "@workspace/contracts";
 
 export function useCreateEvent() {
@@ -23,9 +24,11 @@ export function useCreateEvent() {
 
 export function useUpdateEvent(eventId: string) {
   const queryClient = useQueryClient();
+  const currency = useOrgCurrency();
 
   return useMutation({
-    mutationFn: (input: EventFormState) => updateEvent(eventId, formToEventRequest(input)),
+    mutationFn: (input: EventFormState) =>
+      updateEvent(eventId, formToEventRequest(input, currency)),
     onSuccess: async () => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: eventKeys.lists() }),

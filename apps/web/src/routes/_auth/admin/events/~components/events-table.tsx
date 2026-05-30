@@ -28,7 +28,9 @@ import {
 } from "@/components/ui/table";
 import { usePatchEvent } from "@/hooks/use-events";
 import { formatPrice, getOrgPublicUrl } from "@/lib/public";
+import { useOrgCurrency } from "@/hooks/use-org";
 import { eventRegistrationsQueryOptions } from "@/queries/registrations";
+import { Badge } from "@/components/ui/badge";
 import { StatusBadge, VisibilityBadge } from "./event-badges";
 import { RegistrationsTable } from "./registrations-table";
 
@@ -224,6 +226,7 @@ function EventRow({
   onRegistrationsClick: (event: EventDto) => void;
 }) {
   const patchMutation = usePatchEvent(event.id);
+  const currency = useOrgCurrency();
   const publicEventUrl =
     orgSlug && event.visibility === "published"
       ? getOrgPublicUrl(orgSlug, `/events/${event.id}`)
@@ -260,10 +263,22 @@ function EventRow({
         <StatusBadge status={event.status} />
       </TableCell>
       <TableCell className="py-2">
-        <VisibilityBadge visibility={event.visibility} />
+        <div className="flex items-center gap-1">
+          <VisibilityBadge visibility={event.visibility} />
+          {event.reviewStatus === "pending" && (
+            <Badge variant="secondary" className="h-5 px-1.5 text-3xs">
+              In review
+            </Badge>
+          )}
+          {event.reviewStatus === "rejected" && (
+            <Badge variant="destructive" className="h-5 px-1.5 text-3xs">
+              Changes
+            </Badge>
+          )}
+        </div>
       </TableCell>
       <TableCell className="hidden py-2 text-xs font-medium tabular-nums md:table-cell">
-        {event.price === 0 ? "Free" : formatPrice(event.price, "USD")}
+        {event.price === 0 ? "Free" : formatPrice(event.price, currency)}
       </TableCell>
       <TableCell className="py-2 text-xs text-muted-foreground">
         <button

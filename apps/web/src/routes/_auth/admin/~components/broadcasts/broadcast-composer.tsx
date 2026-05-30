@@ -209,10 +209,10 @@ export function BroadcastComposer({ onCreated }: { onCreated?: () => void } = {}
               <Link
                 to="/admin/$orgSlug/settings"
                 params={{ orgSlug }}
-                search={{ tab: "email-domain" }}
+                search={{ tab: "general" }}
                 className="text-foreground underline underline-offset-2 hover:text-primary"
               >
-                Settings → Email
+                Settings → General
               </Link>
             ) : (
               <span className="text-foreground">Settings → Email</span>

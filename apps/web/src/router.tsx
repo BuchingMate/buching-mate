@@ -1,11 +1,22 @@
 import { createRouter as createTanStackRouter } from "@tanstack/react-router";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
-import { HotkeysProvider } from "@tanstack/react-hotkeys";
+import { HotkeysProvider, useHotkey } from "@tanstack/react-hotkeys";
+import { useState } from "react";
 import { ThemeProvider } from "@/components/theme-provider";
 import { setUnauthorizedHandler } from "@/lib/api";
 import { authKeys } from "@/queries/auth";
 import { routeTree } from "./routeTree.gen";
+
+function QueryDevtoolsShortcut() {
+  const [enabled, setEnabled] = useState(false);
+
+  useHotkey("Mod+Shift+D", () => setEnabled((current) => !current), {
+    requireReset: true,
+  });
+
+  return enabled ? <ReactQueryDevtools initialIsOpen={false} /> : null;
+}
 
 export function getRouter() {
   const queryClient = new QueryClient({
@@ -36,7 +47,7 @@ export function getRouter() {
         <HotkeysProvider>
           <ThemeProvider>{children}</ThemeProvider>
         </HotkeysProvider>
-        {import.meta.env.DEV ? <ReactQueryDevtools initialIsOpen={false} /> : null}
+        {import.meta.env.DEV ? <QueryDevtoolsShortcut /> : null}
       </QueryClientProvider>
     ),
   });

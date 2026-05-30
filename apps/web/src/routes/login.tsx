@@ -1,6 +1,7 @@
 import { createFileRoute, Link, redirect, useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { KeyRound } from "lucide-react";
 import { authClient } from "@/lib/auth-client";
 import { attendeeAuthClient } from "@/lib/attendee-auth-client";
 import { Button } from "@/components/ui/button";
@@ -12,6 +13,8 @@ import { getPublicRequestInfo } from "@/lib/public";
 import { attendeeSessionQueryOptions, authKeys, sessionQueryOptions } from "@/queries/auth";
 import { pageHead } from "@/lib/seo";
 import { emailDomainHint, isEmailDomainAllowed } from "@/lib/email-domain";
+import { TurnstileWidget, turnstileEnabled } from "@/components/turnstile-widget";
+import { ResendVerificationButton } from "@/components/resend-verification-button";
 
 export const Route = createFileRoute("/login")({
   component: Login,
@@ -51,28 +54,64 @@ function StaffLogin() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [passkeyLoading, setPasskeyLoading] = useState(false);
+  const [captchaToken, setCaptchaToken] = useState("");
+  const [needsVerify, setNeedsVerify] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    const preloadPasskeys = async () => {
+      if (typeof PublicKeyCredential === "undefined") return;
+      if (!PublicKeyCredential.isConditionalMediationAvailable) return;
+      const available = await PublicKeyCredential.isConditionalMediationAvailable();
+      if (!available || cancelled) return;
+      await authClient.signIn.passkey({ autoFill: true });
+    };
+
+    void preloadPasskeys();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
+    setNeedsVerify(false);
 
     if (!isEmailDomainAllowed(email)) {
       setError(emailDomainHint() ?? "Email domain not allowed");
       return;
     }
 
+    if (turnstileEnabled && !captchaToken) {
+      setError("Please complete the captcha");
+      return;
+    }
+
     setLoading(true);
 
     try {
-      const result = await authClient.signIn.email({ email, password });
+      const result = await authClient.signIn.email(
+        { email, password },
+        {
+          headers: captchaToken ? { "x-captcha-response": captchaToken } : undefined,
+        },
+      );
 
       if (result.error) {
+        if (result.error.code === "EMAIL_NOT_VERIFIED") {
+          setNeedsVerify(true);
+        }
         setError(result.error.message ?? "Unable to sign in");
         return;
       }
 
-      await queryClient.invalidateQueries({ queryKey: authKeys.session });
-      await queryClient.invalidateQueries({ queryKey: authKeys.currentOrg });
+      // refetchType "all" forces the (inactive) session/org queries to refetch now;
+      // otherwise the /admin guard reads stale null from the cache and bounces here.
+      await queryClient.invalidateQueries({ queryKey: authKeys.session, refetchType: "all" });
+      await queryClient.invalidateQueries({ queryKey: authKeys.currentOrg, refetchType: "all" });
       await navigate({ to: "/admin" });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to sign in");
@@ -86,6 +125,28 @@ function StaffLogin() {
       provider: "google",
       callbackURL: `${window.location.origin}/admin`,
     });
+  };
+
+  const handlePasskeySignIn = async () => {
+    setPasskeyLoading(true);
+    setError(null);
+    try {
+      const result = await authClient.signIn.passkey();
+      if (result.error) {
+        setError(result.error.message ?? "Unable to sign in with passkey");
+        return;
+      }
+
+      // refetchType "all" forces the (inactive) session/org queries to refetch now;
+      // otherwise the /admin guard reads stale null from the cache and bounces here.
+      await queryClient.invalidateQueries({ queryKey: authKeys.session, refetchType: "all" });
+      await queryClient.invalidateQueries({ queryKey: authKeys.currentOrg, refetchType: "all" });
+      await navigate({ to: "/admin" });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to sign in with passkey");
+    } finally {
+      setPasskeyLoading(false);
+    }
   };
 
   return (
@@ -122,11 +183,15 @@ function StaffLogin() {
             />
           </div>
 
+          <TurnstileWidget onToken={setCaptchaToken} />
+
           {error && (
             <Alert variant="destructive">
               <AlertDescription>{error}</AlertDescription>
             </Alert>
           )}
+
+          {needsVerify && <ResendVerificationButton email={email} callbackPath="/admin" />}
 
           <Button type="submit" className="w-full" disabled={loading}>
             {loading ? "Signing in..." : "Sign in"}
@@ -141,6 +206,16 @@ function StaffLogin() {
 
         <Button type="button" variant="outline" className="w-full" onClick={handleGoogleSignIn}>
           Google
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          className="w-full"
+          onClick={handlePasskeySignIn}
+          disabled={passkeyLoading}
+        >
+          <KeyRound className="size-4" />
+          {passkeyLoading ? "Checking passkey..." : "Sign in with passkey"}
         </Button>
 
         <p className="text-center text-sm">

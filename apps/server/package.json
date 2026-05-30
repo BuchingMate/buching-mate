@@ -10,6 +10,9 @@
     "preview": "NODE_ENV=production bun --env-file=../../.env dist/index.js",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "bun --env-file=../../.env src/db/migrate.ts",
+    "db:seed": "bun --env-file=../../.env src/db/seed.ts",
+    "db:seed:reset": "bun --env-file=../../.env src/db/seed.ts --reset",
+    "enterprise:seats": "bun --env-file=../../.env scripts/set-enterprise-seats.ts",
     "db:studio": "drizzle-kit studio",
     "lint": "oxlint",
     "lint:fix": "oxlint --fix",
@@ -22,6 +25,7 @@
   "dependencies": {
     "@aws-sdk/client-s3": "^3.957.0",
     "@aws-sdk/s3-request-presigner": "^3.957.0",
+    "@better-auth/passkey": "^1.6.11",
     "@opentelemetry/api": "^1.9.1",
     "@opentelemetry/exporter-trace-otlp-http": "^0.217.0",
     "@opentelemetry/resources": "^2.7.1",
@@ -30,18 +34,21 @@
     "@polar-sh/better-auth": "^1.8.4",
     "@polar-sh/sdk": "^0.47.1",
     "@workspace/contracts": "workspace:*",
-    "better-auth": "^1.6.9",
+    "better-auth": "1.6.11",
+    "disposable-email-domains": "^1.0.62",
     "drizzle-orm": "^0.40.0",
     "hono": "^4.11.4",
     "pino": "^10.3.1",
     "postgres": "^3.4.5",
     "resend": "^6.12.2",
     "stripe": "^22.1.1",
+    "svix": "^1.95.1",
     "zod": "^4.4.3"
   },
   "devDependencies": {
     "@types/bun": "^1.3.6",
     "drizzle-kit": "^0.30.0",
+    "drizzle-seed": "^0.3.1",
     "typescript": "^5.9.3"
   }
 }

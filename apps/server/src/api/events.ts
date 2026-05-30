@@ -11,13 +11,19 @@ import type { ApiEnv } from "./types";
 import { integerOrNull, isRecord, readJson, stringOrNull } from "./validation";
 import { requireAuth, requireOrg, requireRole } from "../middleware/auth";
 import {
+  approveEvent,
   createEvent,
   deleteEvent,
   duplicateEvent,
+  EventEndIncompleteError,
+  EventReviewRequiredError,
+  EventReviewerInvalidError,
   getEvent,
   listEventResources,
   listEvents,
+  rejectEvent,
   replaceEventResources,
+  submitForReview,
   updateEvent,
 } from "../services/events";
 import { listRegistrationsByEvent } from "../services/registrations";
@@ -49,6 +55,12 @@ function isEventVisibility(value: string): value is EventVisibility {
   return eventVisibilities.includes(value as EventVisibility);
 }
 
+const supportedTimezones = new Set(Intl.supportedValuesOf("timeZone"));
+
+function isSupportedTimezone(value: string): boolean {
+  return value === "UTC" || supportedTimezones.has(value);
+}
+
 function parseEvent(input: unknown, partial: false): CreateEventRequest | string;
 function parseEvent(input: unknown, partial: true): UpdateEventRequest | string;
 function parseEvent(
@@ -72,11 +84,30 @@ function parseEvent(
     "imageUrl",
     "recurrenceFrequency",
     "recurrenceEndDate",
+    "endDate",
+    "endTime",
+    "reviewerId",
   ] as const) {
     if (input[field] !== undefined) {
       const value = stringOrNull(input[field]);
       if (value === undefined) return `${field} must be a string or null`;
       parsed[field] = value;
+    }
+  }
+
+  if (input.timezone !== undefined) {
+    if (typeof input.timezone !== "string" || !isSupportedTimezone(input.timezone)) {
+      return "timezone must be a valid IANA timezone";
+    }
+    parsed.timezone = input.timezone;
+  }
+
+  for (const field of ["locationLat", "locationLng"] as const) {
+    if (input[field] !== undefined) {
+      if (input[field] !== null && typeof input[field] !== "number") {
+        return `${field} must be a number or null`;
+      }
+      parsed[field] = input[field] as number | null;
     }
   }
 
@@ -124,6 +155,16 @@ function parseEvent(
     if (typeof input.visibility !== "string" || !isEventVisibility(input.visibility))
       return "Event visibility is invalid";
     parsed.visibility = input.visibility;
+  }
+
+  // videoProvider is authoritative for Zoom attach/detach. On create it's
+  // required so old clients can't accidentally publish events that silently
+  // skip the meeting attach (previous behavior auto-attached on publish).
+  if (!partial || input.videoProvider !== undefined) {
+    if (input.videoProvider !== null && input.videoProvider !== "zoom") {
+      return "videoProvider must be 'zoom' or null";
+    }
+    parsed.videoProvider = input.videoProvider;
   }
 
   if (input.archivedAt !== undefined) {
@@ -207,7 +248,17 @@ export const eventRoutes = new Hono<ApiEnv>()
     if (typeof input === "string") return apiError(c, 400, "invalid_event", input);
     const cap = await enforceFreeEventCap(c);
     if (cap) return apiError(c, 402, cap.error, `Free plan allows ${cap.limit} event per month`);
-    return c.json({ event: await createEvent(c.var.orgId, c.var.user.id, input) }, 201);
+    try {
+      return c.json({ event: await createEvent(c.var.orgId, c.var.user.id, input) }, 201);
+    } catch (err) {
+      if (err instanceof EventReviewRequiredError) {
+        return apiError(c, 409, "review_required", err.message);
+      }
+      if (err instanceof EventReviewerInvalidError) {
+        return apiError(c, 400, "invalid_reviewer", err.message);
+      }
+      throw err;
+    }
   })
   .get("/:eventId", async (c) => {
     const event = await getEvent(c.var.orgId, c.req.param("eventId"));
@@ -217,9 +268,22 @@ export const eventRoutes = new Hono<ApiEnv>()
   .patch("/:eventId", requireRole("manager"), async (c) => {
     const input = parseEvent(await readJson(c), true);
     if (typeof input === "string") return apiError(c, 400, "invalid_event", input);
-    const event = await updateEvent(c.var.orgId, c.req.param("eventId"), input);
-    if (!event) return apiError(c, 404, "event_not_found", "Event not found");
-    return c.json({ event });
+    try {
+      const event = await updateEvent(c.var.orgId, c.req.param("eventId"), input);
+      if (!event) return apiError(c, 404, "event_not_found", "Event not found");
+      return c.json({ event });
+    } catch (err) {
+      if (err instanceof EventReviewRequiredError) {
+        return apiError(c, 409, "review_required", err.message);
+      }
+      if (err instanceof EventReviewerInvalidError) {
+        return apiError(c, 400, "invalid_reviewer", err.message);
+      }
+      if (err instanceof EventEndIncompleteError) {
+        return apiError(c, 400, "invalid_end", err.message);
+      }
+      throw err;
+    }
   })
   .delete("/:eventId", requireRole("admin"), async (c) => {
     const deleted = await deleteEvent(c.var.orgId, c.req.param("eventId"));
@@ -232,6 +296,48 @@ export const eventRoutes = new Hono<ApiEnv>()
     const event = await duplicateEvent(c.var.orgId, c.var.user.id, c.req.param("eventId"));
     if (!event) return apiError(c, 404, "event_not_found", "Event not found");
     return c.json({ event }, 201);
+  })
+  .post("/:eventId/submit-review", requireRole("manager"), async (c) => {
+    const body = await readJson(c);
+    if (!isRecord(body) || typeof body.reviewerId !== "string" || !body.reviewerId.trim()) {
+      return apiError(c, 400, "invalid_review", "reviewerId is required");
+    }
+    try {
+      const event = await submitForReview(
+        c.var.orgId,
+        c.req.param("eventId"),
+        body.reviewerId,
+        c.var.user.id,
+      );
+      if (!event) return apiError(c, 404, "event_not_found", "Event not found");
+      return c.json({ event });
+    } catch (err) {
+      if (err instanceof EventReviewerInvalidError) {
+        return apiError(c, 400, "invalid_reviewer", err.message);
+      }
+      throw err;
+    }
+  })
+  // Only the assigned reviewer can approve or reject. No role gate: a viewer
+  // assigned as reviewer must be able to act; an admin who isn't the reviewer
+  // must not.
+  .post("/:eventId/approve", async (c) => {
+    const event = await approveEvent(c.var.orgId, c.req.param("eventId"), c.var.user.id);
+    if (event === "forbidden")
+      return apiError(c, 403, "not_reviewer", "Only the assigned reviewer can approve");
+    if (!event) return apiError(c, 404, "event_not_found", "Event not found");
+    return c.json({ event });
+  })
+  .post("/:eventId/reject", async (c) => {
+    const body = await readJson(c);
+    const note = isRecord(body) ? stringOrNull(body.note) : null;
+    if (note === undefined)
+      return apiError(c, 400, "invalid_review", "note must be a string or null");
+    const event = await rejectEvent(c.var.orgId, c.req.param("eventId"), c.var.user.id, note);
+    if (event === "forbidden")
+      return apiError(c, 403, "not_reviewer", "Only the assigned reviewer can reject");
+    if (!event) return apiError(c, 404, "event_not_found", "Event not found");
+    return c.json({ event });
   })
   .get("/:eventId/registrations", async (c) =>
     c.json({ registrations: await listRegistrationsByEvent(c.var.orgId, c.req.param("eventId")) }),

@@ -3,7 +3,7 @@ import { getPublicRequestInfo, getPublicSiteOrigin } from "@/lib/public";
 import { sessionQueryOptions } from "@/queries/auth";
 
 export const Route = createFileRoute("/_auth")({
-  ssr: false,
+  ssr: "data-only",
   beforeLoad: async ({ context }) => {
     const { slug } = await getPublicRequestInfo();
     if (slug) {

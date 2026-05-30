@@ -86,9 +86,9 @@ export function EventHeaderActions({
         <TooltipContent>{deleteMutation.isPending ? "Deleting..." : "Delete"}</TooltipContent>
       </Tooltip>
       <form.Subscribe
-        // eslint-disable-next-line react/no-children-prop
         selector={(state) => [state.canSubmit, state.isSubmitting, state.isPristine] as const}
-        children={([canSubmit, isSubmitting, isPristine]) => (
+      >
+        {([canSubmit, isSubmitting, isPristine]) => (
           <Button
             type="submit"
             form="event-details-form"
@@ -100,7 +100,7 @@ export function EventHeaderActions({
             {isSubmitting || saveMutation.isPending ? "Saving..." : "Save changes"}
           </Button>
         )}
-      />
+      </form.Subscribe>
     </div>
   );
 }
@@ -123,7 +123,11 @@ function PublicEventActions({
 
   return (
     <>
-      <Button variant="outline" render={<a href={url} target="_blank" rel="noreferrer" />}>
+      <Button
+        variant="outline"
+        nativeButton={false}
+        render={<a href={url} target="_blank" rel="noreferrer" />}
+      >
         <ExternalLink className="size-4" />
         View public page
       </Button>

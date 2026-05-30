@@ -12,6 +12,7 @@ export type OrgPlan = "free" | "team" | "enterprise";
 export type ResourceType = "instructor" | "material" | "location" | "equipment" | "custom";
 export type EventStatus = "upcoming" | "completed" | "cancelled";
 export type EventVisibility = "published" | "unpublished";
+export type EventReviewStatus = "none" | "pending" | "approved" | "rejected";
 export type RegistrationStatus = "pending" | "confirmed" | "waitlisted" | "cancelled";
 export type PaymentStatus = "not_required" | "pending" | "paid" | "refunded" | "expired" | "failed";
 export type PublicAssetKind = "org_logo" | "event_image";
@@ -135,6 +136,57 @@ export function baseWeeklySends(plan: OrgPlan): number {
   if (plan === "free") return FREE_WEEKLY_SENDS;
   if (plan === "team") return TEAM_INCLUDED_WEEKLY_SENDS;
   return Number.MAX_SAFE_INTEGER;
+}
+
+// Admin-seat allowances. A seat is consumed by owner/admin members only. Mirrors
+// the server constants in ee/billing/polar.ts so the web can render plan copy
+// without importing server code.
+export const FREE_SEAT_CAP = 3;
+export const TEAM_INCLUDED_SEATS = 5;
+
+// Team plan pricing for one billing interval, fetched live from Polar (the source
+// of truth) and surfaced to the upgrade card. Amounts are in minor units (cents).
+export interface PlanPricing {
+  interval: "month" | "year";
+  basePriceCents: number;
+  includedSeats: number;
+  extraSeatPriceCents: number;
+  currency: string;
+}
+
+export interface PlanPricingResponse {
+  monthly: PlanPricing | null;
+  annual: PlanPricing | null;
+}
+
+// What the Team plan includes, for the upgrade card checklist. Real features only.
+export const TEAM_BENEFITS: readonly string[] = [
+  `${TEAM_INCLUDED_SEATS} admin seats included`,
+  "Unlimited managers & viewers",
+  `${TEAM_INCLUDED_WEEKLY_SENDS.toLocaleString("en-US")} broadcast sends per week`,
+  "Send email from your own domain",
+  "Custom subdomain",
+] as const;
+
+// Current subscription summary for the plan card. All fields null when the org has
+// no Polar subscription row yet (e.g. Free).
+export interface SubscriptionInfo {
+  plan: OrgPlan;
+  status: string | null;
+  interval: "month" | "year" | null;
+  currentPeriodEnd: string | null;
+  cancelAtPeriodEnd: boolean;
+}
+
+// A past charge on the org's Polar account, for the billing-history table.
+export interface BillingHistoryItem {
+  id: string;
+  date: string;
+  amountCents: number;
+  currency: string;
+  status: string;
+  paid: boolean;
+  invoiceAvailable: boolean;
 }
 
 // An org's reusable email template settings. The same brand wraps every
@@ -265,6 +317,14 @@ export interface MemberDto {
   createdAt: string;
 }
 
+// Seat usage for an org. A seat is consumed by owner/admin members only; cap is
+// null when uncapped (enterprise with no contracted limit).
+export interface SeatUsageDto {
+  used: number;
+  cap: number | null;
+  plan: OrgPlan;
+}
+
 export interface ResourceDto {
   id: string;
   orgId: string;
@@ -306,11 +366,20 @@ export interface EventDto {
   date: string;
   time: string;
   duration: number;
+  endDate: string | null;
+  endTime: string | null;
+  timezone: string;
   allDay: boolean;
   maxCapacity: number | null;
   location: string | null;
+  locationLat: number | null;
+  locationLng: number | null;
   status: EventStatus;
   visibility: EventVisibility;
+  reviewerId: string | null;
+  reviewStatus: EventReviewStatus;
+  reviewNote: string | null;
+  reviewedAt: string | null;
   archivedAt: string | null;
   recurring: boolean;
   recurrenceFrequency: string | null;
@@ -320,6 +389,7 @@ export interface EventDto {
   price: number;
   imageUrl: string | null;
   detailImages: EventImageDto[];
+  video?: EventVideoSummary | null;
   confirmedRegistrations: number;
   waitlistedRegistrations: number;
   createdAt: string;
@@ -329,6 +399,12 @@ export interface EventDto {
 export interface EventImageDto {
   id: string;
   url: string;
+}
+
+export interface EventVideoSummary {
+  provider: "zoom";
+  meetingId: string;
+  joinUrl: string;
 }
 
 export interface PublicAssetDto {
@@ -452,11 +528,20 @@ export interface CreateEventRequest {
   date: string;
   time: string;
   duration: number;
+  endDate?: string | null;
+  endTime?: string | null;
+  timezone?: string;
   allDay?: boolean;
   maxCapacity?: number | null;
   location?: string | null;
+  locationLat?: number | null;
+  locationLng?: number | null;
   status?: EventStatus;
   visibility?: EventVisibility;
+  reviewerId?: string | null;
+  // Required on create: authoritative signal for whether the event is a Zoom
+  // meeting. Send `null` for non-video events; older callers must be updated.
+  videoProvider: "zoom" | null;
   recurring?: boolean;
   recurrenceFrequency?: string | null;
   recurrenceDays?: string[];

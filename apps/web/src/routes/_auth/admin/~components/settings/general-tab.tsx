@@ -15,9 +15,11 @@ import {
 } from "@/components/ui/select";
 import { clearOrgLogo } from "@/lib/assets";
 import { updateOrgSettings } from "@/lib/org";
-import { getOrgPublicUrl } from "@/lib/public";
+import { DEFAULT_CURRENCY, getOrgPublicUrl, listCurrencies } from "@/lib/public";
 import { currentOrgQueryOptions } from "@/queries/auth";
 import { orgKeys, orgSettingsQueryOptions } from "@/queries/org";
+
+const CURRENCIES = listCurrencies();
 
 export function GeneralTab({ orgSlug }: { orgSlug: string }) {
   const orgQuery = useQuery(currentOrgQueryOptions);
@@ -25,7 +27,7 @@ export function GeneralTab({ orgSlug }: { orgSlug: string }) {
   const queryClient = useQueryClient();
 
   const [contactEmail, setContactEmail] = useState("");
-  const [currency, setCurrency] = useState("USD");
+  const [currency, setCurrency] = useState(DEFAULT_CURRENCY);
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [copied, setCopied] = useState(false);
@@ -155,12 +157,12 @@ export function GeneralTab({ orgSlug }: { orgSlug: string }) {
               <SelectTrigger id="currency">
                 <SelectValue />
               </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="USD">USD</SelectItem>
-                <SelectItem value="CAD">CAD</SelectItem>
-                <SelectItem value="EUR">EUR</SelectItem>
-                <SelectItem value="GBP">GBP</SelectItem>
-                <SelectItem value="AUD">AUD</SelectItem>
+              <SelectContent className="max-h-72">
+                {CURRENCIES.map(({ code, name }) => (
+                  <SelectItem key={code} value={code}>
+                    {code} — {name}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>

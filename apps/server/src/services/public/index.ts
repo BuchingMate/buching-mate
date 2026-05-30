@@ -9,6 +9,7 @@ import {
   registrations,
 } from "../../db/schema";
 import { getEvent, listEvents } from "../events";
+import { eventStartUtc, eventEndUtc } from "../../lib/event-time";
 import { rewritePublicAssetUrl } from "../assets/public-url";
 import { createRegistration, toRegistrationDto } from "../registrations";
 import { sendBookingConfirmationEmail, sendBookingResumeEmail } from "../registrations/email";
@@ -143,9 +144,10 @@ export async function registerForPublicEvent(
       const video = await getEventVideo(event.orgId, event.id);
       joinUrl = video?.joinUrl ?? null;
     }
-    const hhmm = event.time.length >= 5 ? event.time.slice(0, 5) : "00:00";
-    const startUtc = new Date(`${event.date}T${hhmm}:00Z`);
-    const endUtc = new Date(startUtc.getTime() + Math.max(1, event.duration) * 60_000);
+    const startUtc = eventStartUtc(event.date, event.time, event.timezone);
+    const endUtc =
+      eventEndUtc(event.endDate, event.endTime, event.timezone) ??
+      new Date(startUtc.getTime() + Math.max(1, event.duration) * 60_000);
     void sendBookingConfirmationEmail({
       orgId: event.orgId,
       to: email,

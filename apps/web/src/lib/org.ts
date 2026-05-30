@@ -1,4 +1,10 @@
-import type { OrgRole, OrgSettingsDto, UpdateOrgSettingsRequest } from "@workspace/contracts";
+import type {
+  MemberDto,
+  OrgRole,
+  OrgSettingsDto,
+  SeatUsageDto,
+  UpdateOrgSettingsRequest,
+} from "@workspace/contracts";
 import { api } from "./api";
 
 export interface CurrentOrgResponse {
@@ -22,4 +28,12 @@ export function getOrgSettings() {
 
 export function updateOrgSettings(input: UpdateOrgSettingsRequest) {
   return api.patch<{ settings: OrgSettingsDto }>("/api/org/settings", input);
+}
+
+export function getOrgMembers() {
+  return api.get<{ members: MemberDto[] }>("/api/org/members");
+}
+
+export function getSeatUsage() {
+  return api.get<SeatUsageDto>("/api/org/seats");
 }

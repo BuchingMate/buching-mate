@@ -10,6 +10,7 @@ import {
   zoomVideoAccounts,
 } from "../../db/schema";
 import { decrypt, encrypt } from "../../lib/crypto";
+import { eventStartUtc } from "../../lib/event-time";
 import { getLogger } from "../../observability/request-context";
 import {
   type CreateMeetingInput,
@@ -236,8 +237,7 @@ async function loadAccessToken(connectionId: string): Promise<string> {
 }
 
 function combineEventStartUtc(event: typeof events.$inferSelect): Date {
-  const time = event.time.length >= 5 ? event.time.slice(0, 5) : "00:00";
-  return new Date(`${event.date}T${time}:00Z`);
+  return eventStartUtc(event.date, event.time, event.timezone);
 }
 
 const DAY_NAME_TO_ZOOM: Record<string, number> = {
@@ -280,10 +280,16 @@ function parseRecurrenceDays(days: string[]): number[] {
 
 export function recurrenceForEvent(event: typeof events.$inferSelect) {
   if (!event.recurring || !event.recurrenceFrequency) return null;
-  const freq = event.recurrenceFrequency.toLowerCase();
+  const raw = event.recurrenceFrequency.toLowerCase();
+  // "Every 2 weeks" is just a weekly recurrence with an interval of 2.
+  const isBiweekly = raw === "biweekly";
+  const freq = isBiweekly ? "weekly" : raw;
   if (freq !== "daily" && freq !== "weekly" && freq !== "monthly") return null;
-  const interval =
-    event.recurrenceInterval && event.recurrenceInterval > 0 ? event.recurrenceInterval : 1;
+  const interval = isBiweekly
+    ? 2
+    : event.recurrenceInterval && event.recurrenceInterval > 0
+      ? event.recurrenceInterval
+      : 1;
   const recurrence: NonNullable<CreateMeetingInput["recurrence"]> = {
     frequency: freq,
     interval,
@@ -308,6 +314,7 @@ function meetingInputForEvent(event: typeof events.$inferSelect): CreateMeetingI
     topic: event.title,
     startUtc: combineEventStartUtc(event),
     durationMinutes: Math.max(1, event.duration),
+    timezone: event.timezone,
     agenda: event.description ?? null,
     recurrence: recurrenceForEvent(event),
   };

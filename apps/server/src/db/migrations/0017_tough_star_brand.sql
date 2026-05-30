@@ -1,0 +1,1 @@
+ALTER TABLE "polar_subscriptions" ADD COLUMN "recurring_interval" text;

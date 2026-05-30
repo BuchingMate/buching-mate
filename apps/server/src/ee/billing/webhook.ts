@@ -6,6 +6,7 @@ import {
   broadcastCapForProduct,
   isBroadcastTierProduct,
   planFromProductId,
+  syncSeatCount,
   type OrgPlan,
 } from "./polar";
 
@@ -18,6 +19,7 @@ type PolarSubscriptionPayload = {
   trialEnd: Date | null;
   cancelAtPeriodEnd: boolean;
   seats?: number | null;
+  recurringInterval?: string | null;
   metadata: Record<string, unknown>;
   endsAt?: Date | null;
 };
@@ -38,7 +40,9 @@ export function planFromMetadata(meta: Record<string, unknown> | undefined | nul
   return v === "team" || v === "enterprise" ? v : null;
 }
 
-function mapStatus(s: string): "trialing" | "active" | "past_due" | "canceled" | "incomplete" {
+export function mapStatus(
+  s: string,
+): "trialing" | "active" | "past_due" | "canceled" | "incomplete" {
   switch (s) {
     case "trialing":
       return "trialing";
@@ -104,6 +108,7 @@ async function upsertSubscription(orgId: string, sub: PolarSubscriptionPayload) 
         polarProductId: sub.productId,
         status,
         seatCount: seats,
+        recurringInterval: sub.recurringInterval ?? null,
         currentPeriodEnd: sub.currentPeriodEnd,
         trialEndsAt: sub.trialEnd,
         cancelAtPeriodEnd: sub.cancelAtPeriodEnd,
@@ -117,6 +122,7 @@ async function upsertSubscription(orgId: string, sub: PolarSubscriptionPayload) 
           polarProductId: sub.productId,
           status,
           seatCount: seats,
+          recurringInterval: sub.recurringInterval ?? null,
           currentPeriodEnd: sub.currentPeriodEnd,
           trialEndsAt: sub.trialEnd,
           cancelAtPeriodEnd: sub.cancelAtPeriodEnd,
@@ -125,8 +131,19 @@ async function upsertSubscription(orgId: string, sub: PolarSubscriptionPayload) 
         .where(eq(polarSubscriptions.orgId, orgId));
     }
 
-    await tx.update(orgSettings).set({ plan, updatedAt: now }).where(eq(orgSettings.orgId, orgId));
+    await tx
+      .insert(orgSettings)
+      .values({ orgId, plan })
+      .onConflictDoUpdate({
+        target: orgSettings.orgId,
+        set: { plan, updatedAt: now },
+      });
   });
+
+  // Reconcile the Polar seat quantity now that the plan/status row is committed:
+  // floor team seats up to the seated (owner/admin) count, and pin enterprise to its
+  // contracted limit. Self-guards (no-op unless active/trialing and the target differs).
+  await syncSeatCount(orgId);
 }
 
 export async function handleSubscriptionCreated(payload: SubPayload) {

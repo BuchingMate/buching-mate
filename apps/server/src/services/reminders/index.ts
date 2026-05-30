@@ -9,18 +9,14 @@ import {
 } from "../../db/schema";
 import { getLogger } from "../../observability/request-context";
 import { buildEventIcs } from "../../lib/ics";
+import { eventStartUtc } from "../../lib/event-time";
 import { getJoinUrlForRegistration } from "../video";
-import { sendTenantEmail } from "../email/mailer";
+import { getSuspendedOrgIds, sendTenantEmail } from "../email/mailer";
 
 const KIND_WINDOWS: Record<"t24h" | "t1h", { lookAheadMs: number; windowMs: number }> = {
   t24h: { lookAheadMs: 24 * 3600 * 1000, windowMs: 60 * 60 * 1000 },
   t1h: { lookAheadMs: 60 * 60 * 1000, windowMs: 30 * 60 * 1000 },
 };
-
-function eventStartUtc(date: string, time: string): Date {
-  const hhmm = time.length >= 5 ? time.slice(0, 5) : "00:00";
-  return new Date(`${date}T${hhmm}:00Z`);
-}
 
 async function listDueRegistrations(kind: "t24h" | "t1h") {
   const { lookAheadMs, windowMs } = KIND_WINDOWS[kind];
@@ -45,7 +41,7 @@ async function listDueRegistrations(kind: "t24h" | "t1h") {
         inArray(registrations.paymentStatus, ["paid", "not_required"]),
         eq(eventsTable.status, "upcoming"),
         sql`(${eventsTable.date}::timestamp + ${eventsTable.time}::time)
-            AT TIME ZONE 'UTC' BETWEEN ${lowerBound.toISOString()}::timestamptz AND ${upperBound.toISOString()}::timestamptz`,
+            AT TIME ZONE ${eventsTable.timezone} BETWEEN ${lowerBound.toISOString()}::timestamptz AND ${upperBound.toISOString()}::timestamptz`,
       ),
     );
 
@@ -81,6 +77,7 @@ function renderReminderHtml(input: {
   whenLabel: string;
   eventDate: string;
   eventTime: string;
+  timezone: string;
   location: string | null;
   joinUrl: string | null;
 }) {
@@ -95,7 +92,7 @@ function renderReminderHtml(input: {
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:480px;background:#ffffff;border-radius:12px;border:1px solid #e2e8f0;overflow:hidden;"><tr><td style="padding:32px;">
 <h1 style="margin:0 0 12px 0;font-size:22px;font-weight:600;">Reminder: ${escapeHtml(input.eventTitle)}</h1>
 <p style="margin:0 0 16px 0;font-size:15px;line-height:1.55;color:#475569;">Hi ${escapeHtml(input.attendeeName)}, your event ${escapeHtml(input.whenLabel)} at ${escapeHtml(input.orgName)}.</p>
-<p style="margin:0 0 4px 0;font-size:14px;color:#475569;">${escapeHtml(input.eventDate)} at ${escapeHtml(input.eventTime)} UTC</p>
+<p style="margin:0 0 4px 0;font-size:14px;color:#475569;">${escapeHtml(input.eventDate)} at ${escapeHtml(input.eventTime)} (${escapeHtml(input.timezone)})</p>
 ${locationRow}
 <div style="margin:20px 0 0 0;">${joinButton}</div>
 </td></tr></table></td></tr></table></body></html>`.trim();
@@ -110,6 +107,7 @@ async function sendReminder(input: {
   kind: "t24h" | "t1h";
   eventDate: string;
   eventTime: string;
+  timezone: string;
   location: string | null;
   joinUrl: string | null;
   startUtc: Date;
@@ -132,6 +130,7 @@ async function sendReminder(input: {
   });
   await sendTenantEmail({
     orgId: input.orgId,
+    kind: "event-reminder",
     to: input.to,
     subject:
       input.kind === "t24h"
@@ -152,7 +151,10 @@ export async function dispatchDueReminders(): Promise<{ sent: number }> {
   let sent = 0;
   for (const kind of ["t24h", "t1h"] as const) {
     const due = await listDueRegistrations(kind);
+    if (due.length === 0) continue;
+    const suspended = await getSuspendedOrgIds([...new Set(due.map((r) => r.reg.orgId))]);
     for (const row of due) {
+      if (suspended.has(row.reg.orgId)) continue;
       const inserted = await db
         .insert(registrationReminders)
         .values({ registrationId: row.reg.id, kind })
@@ -161,7 +163,7 @@ export async function dispatchDueReminders(): Promise<{ sent: number }> {
       if (inserted.length === 0) continue;
 
       const joinUrl = await getJoinUrlForRegistration(row.reg.orgId, row.reg.id);
-      const start = eventStartUtc(row.event.date, row.event.time);
+      const start = eventStartUtc(row.event.date, row.event.time, row.event.timezone);
       const end = new Date(start.getTime() + Math.max(1, row.event.duration) * 60_000);
       await sendReminder({
         orgId: row.reg.orgId,
@@ -170,8 +172,9 @@ export async function dispatchDueReminders(): Promise<{ sent: number }> {
         eventTitle: row.event.title,
         orgName: row.org.name,
         kind,
-        eventDate: start.toISOString().slice(0, 10),
-        eventTime: start.toISOString().slice(11, 16),
+        eventDate: row.event.date,
+        eventTime: row.event.time.slice(0, 5),
+        timezone: row.event.timezone,
         location: row.event.location,
         joinUrl,
         startUtc: start,

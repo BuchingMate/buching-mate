@@ -4,6 +4,7 @@ import {
   bigint,
   boolean,
   customType,
+  doublePrecision,
   index,
   integer,
   jsonb,
@@ -41,6 +42,12 @@ export const polarSubscriptionStatus = pgEnum("polar_subscription_status", [
 ]);
 export const eventStatus = pgEnum("event_status", ["upcoming", "completed", "cancelled"]);
 export const eventVisibility = pgEnum("event_visibility", ["published", "unpublished"]);
+export const eventReviewStatus = pgEnum("events_review_status", [
+  "none",
+  "pending",
+  "approved",
+  "rejected",
+]);
 export const publicAssetKind = pgEnum("public_asset_kind", ["org_logo", "event_image"]);
 export const publicAssetStatus = pgEnum("public_asset_status", ["pending", "ready"]);
 export const registrationStatus = pgEnum("registration_status", [
@@ -118,6 +125,14 @@ export const orgSettings = pgTable(
     // Weekly broadcast send cap from an active capacity add-on. Null means no
     // add-on: the plan's base cap applies.
     broadcastWeeklyCap: integer("broadcast_weekly_cap"),
+    // Contracted seat count for an enterprise org, set out-of-band when a deal is
+    // signed. Caps membership and is the reconcile target that reverts customer seat
+    // edits in the Polar portal. Null means uncapped (no contract limit set).
+    enterpriseSeatLimit: integer("enterprise_seat_limit"),
+    // Flipped true by the Resend webhook handler when complaint rate crosses
+    // threshold. sendTenantEmail refuses to call Resend while this is true.
+    // Operator clears via Drizzle Studio after reviewing.
+    sendingSuspended: boolean("sending_suspended").notNull().default(false),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
@@ -185,11 +200,20 @@ export const events = pgTable(
     date: text("date").notNull(),
     time: time("time").notNull(),
     duration: integer("duration").notNull(),
+    endDate: text("end_date"),
+    endTime: time("end_time"),
+    timezone: text("timezone").notNull().default("UTC"),
     allDay: boolean("all_day").notNull().default(false),
     maxCapacity: integer("max_capacity"),
     location: text("location"),
+    locationLat: doublePrecision("location_lat"),
+    locationLng: doublePrecision("location_lng"),
     status: eventStatus("status").notNull().default("upcoming"),
     visibility: eventVisibility("visibility").notNull().default("unpublished"),
+    reviewerId: text("reviewer_id").references(() => user.id, { onDelete: "set null" }),
+    reviewStatus: eventReviewStatus("review_status").notNull().default("none"),
+    reviewNote: text("review_note"),
+    reviewedAt: timestamp("reviewed_at"),
     archivedAt: timestamp("archived_at"),
     recurring: boolean("recurring").notNull().default(false),
     recurrenceFrequency: text("recurrence_frequency"),
@@ -437,6 +461,29 @@ export const paypalPaymentAccounts = pgTable(
   (table) => [
     uniqueIndex("paypal_payment_accounts_connection_idx").on(table.connectionId),
     uniqueIndex("paypal_payment_accounts_tracking_idx").on(table.trackingId),
+  ],
+);
+
+export const emailEvent = pgTable(
+  "email_event",
+  {
+    id: id(),
+    // Nullable: platform mail (verify, password reset) is sent without an
+    // org_id tag, so the webhook event lands with orgId=null.
+    orgId: text("org_id").references(() => organization.id, { onDelete: "cascade" }),
+    resendEmailId: text("resend_email_id").notNull(),
+    // sent | bounced | complained | delivery_delayed
+    eventType: text("event_type").notNull(),
+    // invite | review-requested | review-approved | review-rejected | booking-resume
+    // | booking-confirmed | event-reminder | null (platform)
+    kind: text("kind"),
+    toEmail: text("to_email").notNull(),
+    payload: jsonb("payload").$type<Record<string, unknown>>().notNull(),
+    receivedAt: timestamp("received_at").notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("email_event_unique_idx").on(table.resendEmailId, table.eventType),
+    index("email_event_org_received_idx").on(table.orgId, table.receivedAt),
   ],
 );
 
@@ -732,6 +779,8 @@ export const polarSubscriptions = pgTable(
     polarProductId: text("polar_product_id"),
     status: polarSubscriptionStatus("status").notNull().default("incomplete"),
     seatCount: integer("seat_count").notNull().default(1),
+    // Billing cadence from Polar: "month" or "year". Null until a subscription syncs.
+    recurringInterval: text("recurring_interval"),
     currentPeriodEnd: timestamp("current_period_end"),
     trialEndsAt: timestamp("trial_ends_at"),
     cancelAtPeriodEnd: boolean("cancel_at_period_end").notNull().default(false),

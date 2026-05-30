@@ -9,7 +9,7 @@ import {
   CarouselNext,
   CarouselPrevious,
 } from "@/components/ui/carousel";
-import { formatPrice, getPublicRequestInfo } from "@/lib/public";
+import { DEFAULT_CURRENCY, formatPrice, getPublicRequestInfo } from "@/lib/public";
 import { publicEventQueryOptions, publicOrgQueryOptions } from "@/queries/public";
 import { NoSubdomainPlaceholder } from "./~components/no-subdomain";
 import { PublicBrandBar } from "./~components/public-brand-bar";
@@ -52,7 +52,7 @@ function PublicEventDetailContent({ slug, eventId }: { slug: string; eventId: st
   const { data: eventData } = useSuspenseQuery(publicEventQueryOptions(slug, eventId));
 
   const event = eventData.event;
-  const currency = orgData.settings?.currency ?? "USD";
+  const currency = orgData.settings?.currency ?? DEFAULT_CURRENCY;
   const isPaid = event.price > 0;
   const galleryImages = [
     ...(event.imageUrl ? [{ id: "cover", url: event.imageUrl }] : []),

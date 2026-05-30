@@ -356,6 +356,7 @@ export function PageBackButton({ label = "Back", ...linkProps }: LinkProps & { l
   return (
     <Button
       render={<Link {...linkProps} />}
+      nativeButton={false}
       variant="outline"
       size="icon-sm"
       className="shrink-0 rounded-full shadow-sm"
