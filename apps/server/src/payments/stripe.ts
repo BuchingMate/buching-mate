@@ -164,7 +164,7 @@ export function createStripeAdapter(): PaymentProviderAdapter {
           ...(input.name ? { name: input.name } : {}),
           metadata: {
             attendeeId: input.externalId,
-            ...(input.metadata ?? {}),
+            ...input.metadata,
           },
         },
         {

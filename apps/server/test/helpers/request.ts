@@ -11,7 +11,7 @@ export interface ReqOpts {
 export async function req(path: string, opts: ReqOpts = {}): Promise<Response> {
   const headers: Record<string, string> = {
     "content-type": "application/json",
-    ...(opts.headers ?? {}),
+    ...opts.headers,
   };
   if (opts.cookie) headers.cookie = opts.cookie;
   if (opts.orgId) headers["X-Org-Id"] = opts.orgId;

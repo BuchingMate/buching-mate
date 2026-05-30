@@ -19,8 +19,6 @@ if (!connectionString) {
 const client = postgres(connectionString, { max: 1 });
 const db = drizzle(client, { schema });
 
-const now = new Date();
-
 const resourceStories = [
   {
     id: `${SEED_PREFIX}resource-instructor`,

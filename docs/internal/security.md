@@ -64,13 +64,18 @@ phishing vector. On create and on rename, names are:
 
 - NFKC-normalized.
 - Stripped of zero-width and right-to-left override characters.
-- Rejected if they contain a URL, a `www.` prefix, or a bare domain
-  (`brand.com`).
+- Rejected if they contain an explicit URL (`https?://` or `www.`).
 - Length-capped at 64 characters.
 - Rejected if empty after normalization.
 
 Source: `apps/server/src/auth/org-name.ts`. Enforced in
 `organizationHooks.beforeCreateOrganization` and `beforeUpdateOrganization`.
+
+The earlier bare-domain heuristic (rejecting any `word.tld`-shaped token) was
+dropped because it flagged legitimate brands (`Acme.io`, `Vue.js`,
+`Next.js Berlin`). Bare-domain phishing payloads still slip through this layer
+— captcha, the disposable-email blocklist, the verify-email gate, and the
+rate-limits below are the other layers that catch them.
 
 ### Auth fundamentals
 
@@ -80,12 +85,19 @@ Source: `apps/server/src/auth/org-name.ts`. Enforced in
   (`apps/server/src/api/org-isolation.test.ts` is the regression net).
 - Per-role seat caps by plan (Free 3, Team 5+addons, Enterprise contracted).
 
-### Rate-limit middleware
+### Rate limits
 
-An in-process token-bucket rate limiter is available
-(`apps/server/src/middleware/rate-limit.ts`). It's applied selectively today;
-see "What you should harden yourself" below for endpoints that should pick
-it up.
+In-process token-bucket limiter (`apps/server/src/middleware/rate-limit.ts`)
+applied to two abuse-prone endpoints:
+
+| Endpoint | Key | Capacity | Refill |
+| --- | --- | --- | --- |
+| `POST /api/auth/send-verification-email` | source IP | 3 | 1 / 5 min |
+| `POST /api/auth/organization/invite-member` | inviter user id | 20 | 1 / 3 min (~480/day) |
+
+The invite limit runs inside the `beforeCreateInvitation` hook so it
+composes with the verify-email + seat-cap checks. State resets on process
+restart; see "Nice to have" below for the multi-instance story.
 
 ## What you should configure
 
@@ -193,10 +205,12 @@ Auto-suspension rule (`apps/server/src/api/webhooks/resend.ts`):
 | Min sends before rule applies | 20 |
 | Complaint rate that flips the flag | > 1 % |
 
-When the flag flips, `sendTenantEmail` throws
-`EmailSendingSuspendedError` and `sendBroadcastEmails` returns every recipient
-as `failed` for that org. To unsuspend, an operator updates
-`org_settings.sending_suspended = false` for that org via Drizzle Studio
+When the flag flips, `sendTenantEmail` logs and returns silently — callers
+(payment confirmations, invites, reminders) keep flowing without throwing.
+`sendBroadcastEmails` returns every recipient as `failed`. The user-visible
+effect is that confirmation/invite/reminder mail is dropped on the floor for
+that org until the flag is cleared. Operator unsuspends by setting
+`org_settings.sending_suspended = false` via Drizzle Studio
 (`bun run db:studio`) after reviewing the events. There is no admin UI yet.
 
 ## What you must set up outside the app
@@ -218,30 +232,17 @@ DNS and account-level setup that the code can't do for you.
 - **Secrets management.** `.env` is gitignored. Use a secret manager in prod
   (1Password, AWS Secrets Manager, Doppler). Never commit production keys.
 
-## What you should harden yourself
+## Nice to have
 
-Reasonable defaults that the project does not yet apply for you. Pick the ones
-that match your risk. Each section is a self-contained todo: problem, fix,
-rough size.
-
-### Per-user invite rate limit
-
-**Problem.** Even a verified account could fire 10,000 invites in a minute.
-Verification slows abuse but doesn't cap throughput.
-
-**Fix.** Wrap the invite endpoint with the existing `rateLimit` middleware in
-`apps/server/src/middleware/rate-limit.ts`. Token bucket keyed on `user.id`.
-Suggested starting point: capacity 20, refill 1 token per 180 seconds → ~20
-burst, ~480 sustained per day. Tune to actual product usage.
-
-**Lift.** ~30 min. Find the better-auth invite route or wrap it via Hono
-handler, attach middleware. Verify with a curl loop.
+Future improvements. Not blocking. Each is a self-contained todo: problem,
+fix, rough size.
 
 ### Sending subdomain split
 
 **Problem.** All outbound mail goes through one Resend identity today. If a
 tenant burns reputation (spam complaints), password resets and billing
-receipts go to spam with it. Single fate-share.
+receipts go to spam with it. Single fate-share. The complaint-rate
+auto-suspend (above) reduces blast radius but doesn't isolate system mail.
 
 **Fix.** Two DNS subdomains, two Resend API keys.
 
@@ -269,31 +270,39 @@ keys + code split + production cutover.
 
 ### Multi-instance rate limiter
 
-**Problem.** The current `rateLimit` middleware uses an in-process `Map`. It
-resets on every server restart. With two Bun replicas behind a load balancer,
-an attacker gets `2 × capacity`.
+**Problem.** The `rateLimit` middleware uses an in-process `Map`. It resets
+on every server restart. With two Bun replicas behind a load balancer, an
+attacker gets `2 × capacity`.
 
 **Fix.** Swap the `Map` for Redis or Cloudflare KV. Same interface
-(`rateLimit({ key, capacity, refillPerSec })`), different backing store. Call
-sites unchanged.
+(`TokenBucketStore.consume(key)`), different backing store. Call sites
+unchanged.
 
 **Lift.** ~half day, once you actually run more than one process. No urgency
 at one instance.
 
-## Frontend follow-ups from the email-verification gate
+### Admin UI for suspended-sending flag
 
-### Rate-limit `sendVerificationEmail`
+**Problem.** Operator currently clears `org_settings.sending_suspended` via
+Drizzle Studio. Works but is friction during an incident.
 
-**Problem.** Signup pending state and login "verify your email" error both
-expose a resend button calling `authClient.sendVerificationEmail({ email })`.
-The endpoint is unthrottled — anyone with a valid email can mass-trigger
-verification mails.
+**Fix.** A staff-only admin route listing suspended orgs with a button to
+unsuspend after review.
 
-**Fix.** Wrap `/api/auth/send-verification-email` with the existing
-`rateLimit` middleware keyed on email (or IP). Suggested: capacity 3, refill
-1 per 300 seconds.
+**Lift.** ~2 hours.
 
-**Lift.** ~15 min.
+### Replay of dropped emails after unsuspend
+
+**Problem.** When `sending_suspended=true`, `sendTenantEmail` silently drops
+the message. There is no queue and no retry after unsuspend; the email is
+lost. Booking confirmations and reminders that happened during the suspension
+window never reach the customer.
+
+**Fix.** Queue dropped sends to a table (`pending_tenant_email`) when
+suspended, replay on unsuspend.
+
+**Lift.** ~half day. Defer unless dropped sends become a real support
+problem.
 
 ## Operator-side items (not code)
 
