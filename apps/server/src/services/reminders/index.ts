@@ -11,7 +11,7 @@ import { getLogger } from "../../observability/request-context";
 import { buildEventIcs } from "../../lib/ics";
 import { eventStartUtc } from "../../lib/event-time";
 import { getJoinUrlForRegistration } from "../video";
-import { sendTenantEmail } from "../email/mailer";
+import { getSuspendedOrgIds, sendTenantEmail } from "../email/mailer";
 
 const KIND_WINDOWS: Record<"t24h" | "t1h", { lookAheadMs: number; windowMs: number }> = {
   t24h: { lookAheadMs: 24 * 3600 * 1000, windowMs: 60 * 60 * 1000 },
@@ -151,7 +151,10 @@ export async function dispatchDueReminders(): Promise<{ sent: number }> {
   let sent = 0;
   for (const kind of ["t24h", "t1h"] as const) {
     const due = await listDueRegistrations(kind);
+    if (due.length === 0) continue;
+    const suspended = await getSuspendedOrgIds([...new Set(due.map((r) => r.reg.orgId))]);
     for (const row of due) {
+      if (suspended.has(row.reg.orgId)) continue;
       const inserted = await db
         .insert(registrationReminders)
         .values({ registrationId: row.reg.id, kind })

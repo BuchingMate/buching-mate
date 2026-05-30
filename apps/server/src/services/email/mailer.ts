@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { Resend } from "resend";
 import { db } from "../../db";
 import { orgEmailDomains, organization, orgSettings } from "../../db/schema";
@@ -118,6 +118,17 @@ async function isSendingSuspended(orgId: string): Promise<boolean> {
     .where(eq(orgSettings.orgId, orgId))
     .limit(1);
   return Boolean(rows[0]?.suspended);
+}
+
+// Batched suspension lookup for loops. Returns the subset of orgIds that have
+// sending suspended. Use this before iterating to avoid an N+1 SELECT pattern.
+export async function getSuspendedOrgIds(orgIds: string[]): Promise<Set<string>> {
+  if (orgIds.length === 0) return new Set();
+  const rows = await db
+    .select({ orgId: orgSettings.orgId })
+    .from(orgSettings)
+    .where(and(inArray(orgSettings.orgId, orgIds), eq(orgSettings.sendingSuspended, true)));
+  return new Set(rows.map((r) => r.orgId));
 }
 
 // Send one transactional email for an org. Resolves the org's sender, then
