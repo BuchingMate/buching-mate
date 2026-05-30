@@ -14,6 +14,7 @@ import { attendeeSessionQueryOptions, authKeys, sessionQueryOptions } from "@/qu
 import { pageHead } from "@/lib/seo";
 import { emailDomainHint, isEmailDomainAllowed } from "@/lib/email-domain";
 import { TurnstileWidget, turnstileEnabled } from "@/components/turnstile-widget";
+import { ResendVerificationButton } from "@/components/resend-verification-button";
 
 export const Route = createFileRoute("/login")({
   component: Login,
@@ -56,20 +57,6 @@ function StaffLogin() {
   const [passkeyLoading, setPasskeyLoading] = useState(false);
   const [captchaToken, setCaptchaToken] = useState("");
   const [needsVerify, setNeedsVerify] = useState(false);
-  const [resendState, setResendState] = useState<"idle" | "sending" | "sent" | "error">("idle");
-
-  const handleResendVerification = async () => {
-    setResendState("sending");
-    try {
-      const result = await authClient.sendVerificationEmail({
-        email,
-        callbackURL: `${window.location.origin}/admin`,
-      });
-      setResendState(result.error ? "error" : "sent");
-    } catch {
-      setResendState("error");
-    }
-  };
 
   useEffect(() => {
     let cancelled = false;
@@ -92,7 +79,6 @@ function StaffLogin() {
     e.preventDefault();
     setError("");
     setNeedsVerify(false);
-    setResendState("idle");
 
     if (!isEmailDomainAllowed(email)) {
       setError(emailDomainHint() ?? "Email domain not allowed");
@@ -115,12 +101,10 @@ function StaffLogin() {
       );
 
       if (result.error) {
-        const code = result.error.code ?? "";
-        const msg = result.error.message ?? "Unable to sign in";
-        if (code === "EMAIL_NOT_VERIFIED" || /verif/i.test(msg)) {
+        if (result.error.code === "EMAIL_NOT_VERIFIED") {
           setNeedsVerify(true);
         }
-        setError(msg);
+        setError(result.error.message ?? "Unable to sign in");
         return;
       }
 
@@ -207,23 +191,7 @@ function StaffLogin() {
             </Alert>
           )}
 
-          {needsVerify && (
-            <Button
-              type="button"
-              variant="outline"
-              className="w-full"
-              onClick={handleResendVerification}
-              disabled={resendState === "sending" || resendState === "sent"}
-            >
-              {resendState === "sending"
-                ? "Resending..."
-                : resendState === "sent"
-                  ? "Email resent"
-                  : resendState === "error"
-                    ? "Retry resend"
-                    : "Resend verification email"}
-            </Button>
-          )}
+          {needsVerify && <ResendVerificationButton email={email} callbackPath="/admin" />}
 
           <Button type="submit" className="w-full" disabled={loading}>
             {loading ? "Signing in..." : "Sign in"}

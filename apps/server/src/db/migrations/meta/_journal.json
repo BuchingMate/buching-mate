@@ -134,6 +134,13 @@
       "when": 1780143910210,
       "tag": "0018_free_stryfe",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1780174055751,
+      "tag": "0019_backfill_email_verified",
+      "breakpoints": true
     }
   ]
 }

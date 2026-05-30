@@ -28,16 +28,52 @@ interface RateLimitOptions {
 const PRUNE_INTERVAL_MS = 5 * 60 * 1000;
 const PRUNE_IDLE_MS = 10 * 60 * 1000;
 
-export function rateLimit(opts: RateLimitOptions) {
-  const buckets = new Map<string, Bucket>();
-  const refillPerMs = opts.refillPerSec / 1000;
+// Reusable token-bucket store. Wrap with rateLimit() for Hono routes, or call
+// .consume(key) directly from places where a middleware doesn't fit (e.g.,
+// better-auth hooks).
+export class TokenBucketStore {
+  private buckets = new Map<string, Bucket>();
+  private refillPerMs: number;
 
-  setInterval(() => {
-    const cutoff = Date.now() - PRUNE_IDLE_MS;
-    for (const [key, b] of buckets) {
-      if (b.refilledAt < cutoff) buckets.delete(key);
+  constructor(
+    private capacity: number,
+    refillPerSec: number,
+  ) {
+    this.refillPerMs = refillPerSec / 1000;
+    setInterval(() => {
+      const cutoff = Date.now() - PRUNE_IDLE_MS;
+      for (const [k, b] of this.buckets) {
+        if (b.refilledAt < cutoff) this.buckets.delete(k);
+      }
+    }, PRUNE_INTERVAL_MS).unref?.();
+  }
+
+  // Try to consume one token. Returns true on success, false when exhausted.
+  consume(key: string): boolean {
+    const now = Date.now();
+    const existing = this.buckets.get(key);
+    const bucket: Bucket = existing
+      ? {
+          tokens: Math.min(
+            this.capacity,
+            existing.tokens + (now - existing.refilledAt) * this.refillPerMs,
+          ),
+          refilledAt: now,
+        }
+      : { tokens: this.capacity, refilledAt: now };
+
+    if (bucket.tokens < 1) {
+      this.buckets.set(key, bucket);
+      return false;
     }
-  }, PRUNE_INTERVAL_MS).unref?.();
+    bucket.tokens -= 1;
+    this.buckets.set(key, bucket);
+    return true;
+  }
+}
+
+export function rateLimit(opts: RateLimitOptions) {
+  const store = new TokenBucketStore(opts.capacity, opts.refillPerSec);
 
   return createMiddleware<ApiEnv>(async (c, next) => {
     const key = opts.key(c);
@@ -45,20 +81,7 @@ export function rateLimit(opts: RateLimitOptions) {
       await next();
       return;
     }
-    const now = Date.now();
-    const existing = buckets.get(key);
-    const bucket: Bucket = existing
-      ? {
-          tokens: Math.min(
-            opts.capacity,
-            existing.tokens + (now - existing.refilledAt) * refillPerMs,
-          ),
-          refilledAt: now,
-        }
-      : { tokens: opts.capacity, refilledAt: now };
-
-    if (bucket.tokens < 1) {
-      buckets.set(key, bucket);
+    if (!store.consume(key)) {
       return apiError(
         c,
         429,
@@ -66,8 +89,6 @@ export function rateLimit(opts: RateLimitOptions) {
         opts.errorMessage ?? "Too many requests — please slow down",
       );
     }
-    bucket.tokens -= 1;
-    buckets.set(key, bucket);
     await next();
   });
 }

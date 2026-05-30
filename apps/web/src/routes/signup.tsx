@@ -17,6 +17,7 @@ import { Separator } from "@/components/ui/separator";
 import { pageHead } from "@/lib/seo";
 import { emailDomainHint, isEmailDomainAllowed } from "@/lib/email-domain";
 import { TurnstileWidget, turnstileEnabled } from "@/components/turnstile-widget";
+import { ResendVerificationButton } from "@/components/resend-verification-button";
 
 export const Route = createFileRoute("/signup")({
   component: Signup,
@@ -40,28 +41,6 @@ function Signup() {
   const [loading, setLoading] = useState(false);
   const [captchaToken, setCaptchaToken] = useState("");
   const [submitted, setSubmitted] = useState(false);
-  const [resendState, setResendState] = useState<"idle" | "sending" | "sent" | "error">("idle");
-  const [resendError, setResendError] = useState("");
-
-  const handleResend = async () => {
-    setResendState("sending");
-    setResendError("");
-    try {
-      const result = await authClient.sendVerificationEmail({
-        email,
-        callbackURL: `${window.location.origin}/onboarding`,
-      });
-      if (result.error) {
-        setResendError(result.error.message ?? "Unable to resend");
-        setResendState("error");
-        return;
-      }
-      setResendState("sent");
-    } catch (err) {
-      setResendError(err instanceof Error ? err.message : "Unable to resend");
-      setResendState("error");
-    }
-  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -123,39 +102,16 @@ function Signup() {
         <div className="w-full max-w-sm space-y-6 text-center">
           <h1 className="text-2xl font-bold">Check your email</h1>
           <p className="text-muted-foreground">
-            We sent a verification link to <span className="font-medium">{email}</span>. Click it
-            to finish signing up.
+            We sent a verification link to <span className="font-medium">{email}</span>. Click it to
+            finish signing up.
           </p>
-          <div className="space-y-2">
-            <Button
-              type="button"
-              variant="outline"
-              className="w-full"
-              onClick={handleResend}
-              disabled={resendState === "sending" || resendState === "sent"}
-            >
-              {resendState === "sending"
-                ? "Resending..."
-                : resendState === "sent"
-                  ? "Email resent"
-                  : "Resend email"}
-            </Button>
-            {resendState === "error" && (
-              <Alert variant="destructive">
-                <AlertDescription>{resendError}</AlertDescription>
-              </Alert>
-            )}
-          </div>
+          <ResendVerificationButton email={email} callbackPath="/onboarding" showError />
           <p className="text-sm text-muted-foreground">
             Wrong address?{" "}
             <button
               type="button"
               className="font-medium underline"
-              onClick={() => {
-                setSubmitted(false);
-                setResendState("idle");
-                setResendError("");
-              }}
+              onClick={() => setSubmitted(false)}
             >
               Go back
             </button>

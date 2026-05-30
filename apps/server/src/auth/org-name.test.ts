@@ -26,7 +26,12 @@ describe("sanitizeOrgName", () => {
     expect(() => sanitizeOrgName("Click https://phish.example")).toThrow(OrgNameError);
   });
 
-  it("rejects bare-domain phishing payloads", () => {
-    expect(() => sanitizeOrgName("Receipt at craftum.io now")).toThrow(OrgNameError);
+  it("rejects names with www. prefix", () => {
+    expect(() => sanitizeOrgName("Visit www.phish.example")).toThrow(OrgNameError);
+  });
+
+  it("accepts brand names containing a dot", () => {
+    expect(sanitizeOrgName("Acme.io")).toBe("Acme.io");
+    expect(sanitizeOrgName("Vue.js Berlin")).toBe("Vue.js Berlin");
   });
 });

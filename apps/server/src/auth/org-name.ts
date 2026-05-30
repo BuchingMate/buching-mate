@@ -3,7 +3,12 @@
 // workspace name to a complete phishing pitch + URL and pump invites through
 // our verified sending domain. See Kaneo writeup, May 2026.
 
-const URL_RE = /(https?:\/\/|www\.|\b[a-z0-9-]+\.[a-z]{2,}\b)/i;
+// Rejects explicit URLs only. The previous bare-domain heuristic
+// (\b[a-z0-9-]+\.[a-z]{2,}\b) was a false-positive magnet for legitimate
+// brands like Acme.io, Vue.js, Next.js Berlin. Phishing names embedding a
+// bare domain still slip through here; the captcha, disposable-email
+// blocklist, and verify-email gate are the other layers that catch them.
+const URL_RE = /(https?:\/\/|www\.)/i;
 // Zero-width + RTL-override + BOM characters used for homoglyph / spoof tricks.
 const INVISIBLE_RE = /[​-‏‪-‮﻿]/g;
 const MAX_LEN = 64;

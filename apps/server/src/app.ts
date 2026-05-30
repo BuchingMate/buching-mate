@@ -3,6 +3,7 @@ import { cors } from "hono/cors";
 import { auth } from "./auth";
 import { BUSINESS_SLUG } from "./branding";
 import { observability } from "./middleware/observability";
+import { rateLimit } from "./middleware/rate-limit";
 import type { HealthResponse, RootResponse } from "@workspace/contracts";
 import { accountRoutes } from "./api/account";
 import { assetRoutes } from "./api/assets";
@@ -61,6 +62,21 @@ export function createApp() {
 
   app.get("/", (c) => c.json<RootResponse>({ ok: true, service: `${BUSINESS_SLUG}-server` }));
   app.get("/health", (c) => c.json<HealthResponse>({ status: "ok" }));
+
+  // Throttle the resend-verification endpoint per source IP — without this,
+  // anyone with a valid email can mass-trigger verification mails. Capacity 3
+  // tokens, refill 1 every 5 minutes.
+  app.use(
+    "/api/auth/send-verification-email",
+    rateLimit({
+      key: (c) =>
+        c.req.header("x-forwarded-for")?.split(",")[0]?.trim() ?? c.req.header("host") ?? "unknown",
+      capacity: 3,
+      refillPerSec: 1 / 300,
+      errorCode: "RESEND_VERIFICATION_RATE_LIMITED",
+      errorMessage: "Too many verification emails requested — try again later",
+    }),
+  );
 
   app.on(["POST", "GET"], "/api/auth/*", (c) => auth.handler(c.req.raw));
 

@@ -12,6 +12,12 @@ import { ac, owner, admin, manager, viewer } from "./auth/permissions";
 import { sendInviteEmail, sendVerifyEmail } from "./auth/email";
 import { isDisposableEmail } from "./auth/disposable";
 import { sanitizeOrgName } from "./auth/org-name";
+import { TokenBucketStore } from "./middleware/rate-limit";
+
+// Per-user invite throttle: even a verified account shouldn't be able to fan
+// out invites at machine speed. Capacity 20 burst, refill 1 token every 3 min
+// → ~480 invites/day sustained. Tune against real product usage.
+const inviteBucket = new TokenBucketStore(20, 1 / 180);
 import {
   handleSubscriptionActive,
   handleSubscriptionCanceled,
@@ -98,6 +104,9 @@ const organizationPlugin = organization({
       // strangers from our verified domain.
       if (!inviter.emailVerified) {
         throw new Error("Verify your email before inviting others");
+      }
+      if (!inviteBucket.consume(inviter.id)) {
+        throw new Error("Too many invites sent — please slow down");
       }
       // Surface the seat limit at invite time so the inviter gets immediate feedback.
       // Seats are only truly reserved at acceptance (beforeAcceptInvitation), so this
