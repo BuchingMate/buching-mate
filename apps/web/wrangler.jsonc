@@ -1,6 +1,6 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "buching-mate-web",
+  "name": "booking-mate-web",
   "compatibility_date": "2026-05-15",
   "compatibility_flags": ["nodejs_compat"],
   "main": "@tanstack/react-start/server-entry",
@@ -20,7 +20,7 @@
   },
   "env": {
     "staging": {
-      "name": "buching-mate-staging-web",
+      "name": "booking-mate-web-staging",
       "vars": {
         "VITE_SERVER_URL": "https://api.staging.buchingmate.com",
         "VITE_PUBLIC_SITE_URL": "https://staging.buchingmate.com",
