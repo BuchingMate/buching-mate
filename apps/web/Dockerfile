@@ -10,6 +10,7 @@ ENV BUILD_VERSION=${BUILD_VERSION}
 COPY package.json bun.lock turbo.json tsconfig.json ./
 COPY apps/web/package.json ./apps/web/
 COPY apps/server/package.json ./apps/server/
+COPY apps/docs/package.json ./apps/docs/
 COPY packages/contracts/package.json ./packages/contracts/
 COPY packages/seo/package.json ./packages/seo/
 
