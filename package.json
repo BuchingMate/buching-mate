@@ -33,7 +33,8 @@
     "bun": ">=1.3.14"
   },
   "workspaces": [
-    "apps/*",
+    "apps/server",
+    "apps/web",
     "packages/*"
   ]
 }
