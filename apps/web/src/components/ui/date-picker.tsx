@@ -39,14 +39,14 @@ function DatePicker({
             variant="outline"
             disabled={disabled}
             className={cn(
-              "w-full justify-start px-3 text-left font-normal",
+              "w-full justify-start overflow-hidden px-3 text-left font-normal",
               !value && "text-muted-foreground",
               className,
             )}
             onBlur={onBlur}
           >
             <CalendarDays className="size-4" />
-            {selected ? formatDisplayDate(selected) : placeholder}
+            <span className="truncate">{selected ? formatDisplayDate(selected) : placeholder}</span>
           </Button>
         }
       />

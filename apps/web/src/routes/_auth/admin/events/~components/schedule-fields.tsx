@@ -34,38 +34,42 @@ export function ScheduleFields({
     `${form.endDate}T${form.endTime}` < `${form.date}T${form.time}`;
 
   return (
-    <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,220px)]">
-      <div className="space-y-3 rounded-xl border bg-card p-4">
-        <ScheduleRow
-          label="Start"
-          marker="filled"
-          date={form.date}
-          time={form.time}
-          disabled={disabled}
-          onDate={(v) => onChange("date", v)}
-          onTime={(v) => onChange("time", v)}
-        />
-        <ScheduleRow
-          label="End"
-          marker="hollow"
-          date={form.endDate}
-          time={form.endTime}
-          disabled={disabled}
-          onDate={(v) => onChange("endDate", v)}
-          onTime={(v) => onChange("endTime", v)}
-        />
-        {endBeforeStart && <p className="text-xs text-destructive">End must be after the start.</p>}
-        {children && <div className="border-t pt-3">{children}</div>}
-      </div>
-      <div className="space-y-1.5 rounded-xl border bg-card p-4">
-        <Label className="flex items-center gap-1.5 text-xs text-muted-foreground">
-          <Globe className="size-3.5" /> Timezone
-        </Label>
-        <TimezonePicker
-          value={form.timezone}
-          disabled={disabled}
-          onChange={(tz) => onChange("timezone", tz)}
-        />
+    <div className="@container">
+      <div className="grid gap-3 @2xl:grid-cols-[minmax(0,1fr)_minmax(0,220px)]">
+        <div className="space-y-3 rounded-xl border bg-card p-4">
+          <ScheduleRow
+            label="Start"
+            marker="filled"
+            date={form.date}
+            time={form.time}
+            disabled={disabled}
+            onDate={(v) => onChange("date", v)}
+            onTime={(v) => onChange("time", v)}
+          />
+          <ScheduleRow
+            label="End"
+            marker="hollow"
+            date={form.endDate}
+            time={form.endTime}
+            disabled={disabled}
+            onDate={(v) => onChange("endDate", v)}
+            onTime={(v) => onChange("endTime", v)}
+          />
+          {endBeforeStart && (
+            <p className="text-xs text-destructive">End must be after the start.</p>
+          )}
+          {children && <div className="border-t pt-3">{children}</div>}
+        </div>
+        <div className="space-y-1.5 rounded-xl border bg-card p-4">
+          <Label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <Globe className="size-3.5" /> Timezone
+          </Label>
+          <TimezonePicker
+            value={form.timezone}
+            disabled={disabled}
+            onChange={(tz) => onChange("timezone", tz)}
+          />
+        </div>
       </div>
     </div>
   );

@@ -110,7 +110,7 @@ export function EventCreateForm(props: Props) {
         void form.handleSubmit();
       }}
     >
-      <div className="grid gap-10 lg:h-[calc(100dvh-11rem)] lg:grid-cols-[260px_minmax(0,1fr)]">
+      <div className="grid gap-10 lg:h-[calc(100dvh-8rem)] lg:grid-cols-[260px_minmax(0,1fr)]">
         {/* Left rail: cover on top, vertical stepper below */}
         <aside className="hidden lg:flex lg:flex-col lg:gap-6 lg:overflow-y-auto lg:py-1">
           <ImageFilePicker

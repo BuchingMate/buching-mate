@@ -8,7 +8,7 @@ export function useEventFormFields(form: {
   store: Parameters<typeof useStore>[0];
   setFieldValue: (field: keyof EventFormState, value: never) => void;
 }) {
-  const values = useStore(form.store, (s) => s.values as EventFormState);
+  const values = useStore(form.store, (s) => (s as { values: EventFormState }).values);
   const setField = (field: keyof EventFormState, value: string) =>
     form.setFieldValue(field, value as never);
   return { values, setField };
