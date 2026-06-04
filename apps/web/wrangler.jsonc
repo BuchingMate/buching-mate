@@ -7,31 +7,17 @@
   "observability": {
     "enabled": true,
   },
-  // Production env (default). All values public — no secrets.
-  // Server-side secrets (BETTER_AUTH_SECRET, STRIPE_*, RESEND_*, etc.) live on Coolify.
+  // NOTE: booking-mate-web is the STAGING worker (despite the name).
+  // VITE_* vars are baked into client JS at build time — wrangler `vars` only
+  // sets the SSR-side process.env. Keep them in sync with the build env below.
+  // Prod worker will be a separate CF service (TBD).
   "vars": {
-    "VITE_SERVER_URL": "https://api.buchingmate.com",
-    "VITE_PUBLIC_SITE_URL": "https://buchingmate.com",
-    "VITE_BUSINESS_NAME": "BuchingMate",
+    "VITE_SERVER_URL": "https://api.staging.buchingmate.com",
+    "VITE_PUBLIC_SITE_URL": "https://staging.buchingmate.com",
+    "VITE_BUSINESS_NAME": "BuchingMate (staging)",
     "VITE_BUSINESS_SLUG": "buching-mate",
     "VITE_BILLING_ENABLED": "true",
     "VITE_TURNSTILE_SITE_KEY": "0x4AAAAAADYkHpYirYipYkZJ",
     "VITE_ALLOWED_EMAIL_DOMAINS": "buchingmate.com",
-  },
-  "env": {
-    "staging": {
-      "name": "booking-mate-web-staging",
-      "vars": {
-        "VITE_SERVER_URL": "https://api.staging.buchingmate.com",
-        "VITE_PUBLIC_SITE_URL": "https://staging.buchingmate.com",
-        "VITE_BUSINESS_NAME": "BuchingMate (staging)",
-        "VITE_BUSINESS_SLUG": "buching-mate",
-        "VITE_BILLING_ENABLED": "true",
-        // TODO: fill from Cloudflare → Turnstile (staging widget, whitelist staging.buchingmate.com + *.staging.buchingmate.com)
-        "VITE_TURNSTILE_SITE_KEY": "",
-        // Staging gate: only @buchingmate.com staff can sign up.
-        "VITE_ALLOWED_EMAIL_DOMAINS": "buchingmate.com",
-      },
-    },
   },
 }
