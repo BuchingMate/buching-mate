@@ -87,6 +87,7 @@ jobs:
     needs: cloud-meta
     if: startsWith(github.ref, 'refs/heads/')
     runs-on: ubuntu-latest
+    environment: ${{ needs.cloud-meta.outputs.env_name }}
     steps:
       - uses: actions/checkout@v6
       - uses: oven-sh/setup-bun@v2
@@ -97,6 +98,17 @@ jobs:
 
       - name: Build web for Cloudflare
         working-directory: apps/web
+        # VITE_* vars are inlined into the client bundle at build time —
+        # wrangler `vars` only cover SSR. Values come from GitHub repo /
+        # environment variables; keep them in sync with wrangler.jsonc.
+        env:
+          VITE_SERVER_URL: ${{ vars.VITE_SERVER_URL }}
+          VITE_PUBLIC_SITE_URL: ${{ vars.VITE_PUBLIC_SITE_URL }}
+          VITE_BUSINESS_NAME: ${{ vars.VITE_BUSINESS_NAME }}
+          VITE_BUSINESS_SLUG: ${{ vars.VITE_BUSINESS_SLUG }}
+          VITE_BILLING_ENABLED: ${{ vars.VITE_BILLING_ENABLED }}
+          VITE_TURNSTILE_SITE_KEY: ${{ vars.VITE_TURNSTILE_SITE_KEY }}
+          VITE_ALLOWED_EMAIL_DOMAINS: ${{ vars.VITE_ALLOWED_EMAIL_DOMAINS }}
         run: bun run build:cf
 
       - name: Deploy to Cloudflare Workers
