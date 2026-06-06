@@ -11,5 +11,13 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql
 
+  # Local mail catcher for dev/e2e. The server posts emails to Mailpit's HTTP
+  # send API when MAILPIT_URL is set; inbox UI + REST API on the same port.
+  mailpit:
+    image: axllent/mailpit
+    container_name: ${MAILPIT_CONTAINER_NAME:-${BUSINESS_SLUG:-insert-business-name}-mailpit}
+    ports:
+      - "${MAILPIT_HTTP_PORT:-8025}:8025"
+
 volumes:
   postgres_data:

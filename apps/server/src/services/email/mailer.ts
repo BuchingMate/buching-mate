@@ -1,24 +1,18 @@
 import { and, eq, inArray } from "drizzle-orm";
-import { Resend } from "resend";
 import { db } from "../../db";
 import { orgEmailDomains, organization, orgSettings } from "../../db/schema";
 import { getLogger } from "../../observability/request-context";
+import { getEmailTransport, type EmailAttachment, type OutgoingEmail } from "./transport";
 
-let client: Resend | null = null;
+// Service layer for outgoing email. Owns the business rules — who a message
+// is from, whether an org may send at all, and that a failed email never
+// breaks the calling flow. Actual delivery goes through the EmailTransport
+// picked in transport.ts (Resend, Mailpit, or log), so providers can be
+// swapped without touching this file's callers.
 
-// Shared Resend client. Returns null when Resend is not configured (local dev).
-export function getResendClient(): Resend | null {
-  if (!client && process.env.RESEND_API_KEY) {
-    client = new Resend(process.env.RESEND_API_KEY);
-  }
-  return client;
-}
-
-// True when Resend is set up. When false the mailer logs instead of sending,
-// which keeps local dev quiet.
-function isConfigured(): boolean {
-  return Boolean(process.env.RESEND_API_KEY && process.env.RESEND_FROM_EMAIL);
-}
+// Re-exported for the domain-verification flow, which talks to Resend's
+// domain API directly and has no provider-agnostic shape.
+export { getResendClient } from "./transport";
 
 export interface TenantSender {
   from: string;
@@ -79,13 +73,9 @@ export async function resolveSender(orgId: string): Promise<TenantSender> {
   });
 }
 
-export interface TenantEmailAttachment {
-  filename: string;
-  contentType: string;
-  content: string;
-}
+export type TenantEmailAttachment = EmailAttachment;
 
-// Categorises every tenant-triggered send. Surfaces as a Resend tag so the
+// Categorises every tenant-triggered send. Surfaces as a provider tag so the
 // webhook can attribute bounces/complaints to a specific surface (e.g. invite
 // vs broadcast) when triaging a reputation issue. Values are ASCII
 // alphanumerics + "-" so they satisfy Resend's tag-value constraints.
@@ -105,12 +95,13 @@ export interface SendTenantEmailInput {
   to: string;
   subject: string;
   html: string;
+  text?: string;
   attachments?: TenantEmailAttachment[];
 }
 
 // Check the auto-suspend flag set by the Resend webhook handler when an org's
-// complaint rate crosses threshold. Refuse to call Resend until an operator
-// clears the flag (see docs/internal/security.md).
+// complaint rate crosses threshold. Refuse to send until an operator clears
+// the flag (see docs/internal/security.md).
 async function isSendingSuspended(orgId: string): Promise<boolean> {
   const rows = await db
     .select({ suspended: orgSettings.sendingSuspended })
@@ -132,17 +123,9 @@ export async function getSuspendedOrgIds(orgIds: string[]): Promise<Set<string>>
 }
 
 // Send one transactional email for an org. Resolves the org's sender, then
-// hands off to Resend. Send errors are logged, not thrown, so a failed email
-// never breaks the caller's flow.
+// hands off to the transport. Send errors are logged, not thrown, so a failed
+// email never breaks the caller's flow.
 export async function sendTenantEmail(input: SendTenantEmailInput): Promise<void> {
-  if (!isConfigured()) {
-    getLogger().info(
-      { orgId: input.orgId, kind: input.kind, to: input.to, subject: input.subject },
-      "dev tenant email",
-    );
-    return;
-  }
-
   if (await isSendingSuspended(input.orgId)) {
     getLogger().warn(
       { orgId: input.orgId, kind: input.kind, to: input.to },
@@ -153,14 +136,15 @@ export async function sendTenantEmail(input: SendTenantEmailInput): Promise<void
 
   const sender = await resolveSender(input.orgId);
   try {
-    await getResendClient()?.emails.send({
+    await getEmailTransport().send({
       from: sender.from,
       to: input.to,
-      ...(sender.replyTo ? { replyTo: sender.replyTo } : {}),
+      replyTo: sender.replyTo,
       subject: input.subject,
       html: input.html,
+      text: input.text,
       attachments: input.attachments,
-      // Carried into the Resend webhook payload so the handler can attribute
+      // Carried into the provider webhook payload so the handler can attribute
       // bounces/complaints to the originating org + surface.
       tags: [
         { name: "org_id", value: input.orgId },
@@ -176,21 +160,19 @@ export interface SendPlatformEmailInput {
   to: string;
   subject: string;
   html: string;
+  text?: string;
 }
 
 // Send one email from the platform itself, with no org sender. Used for system
 // mail that has no org context, such as attendee sign-in links.
 export async function sendPlatformEmail(input: SendPlatformEmailInput): Promise<void> {
-  if (!isConfigured()) {
-    getLogger().info({ to: input.to, subject: input.subject }, "dev platform email");
-    return;
-  }
   try {
-    await getResendClient()?.emails.send({
-      from: process.env.RESEND_FROM_EMAIL!,
+    await getEmailTransport().send({
+      from: process.env.RESEND_FROM_EMAIL || "dev@localhost",
       to: input.to,
       subject: input.subject,
       html: input.html,
+      text: input.text,
     });
   } catch (err) {
     getLogger().warn({ err, to: input.to }, "platform email send failed");
@@ -202,29 +184,16 @@ export interface BroadcastSendResult {
   failed: string[];
 }
 
-// Resend allows up to 100 messages per batch.
-const BATCH_LIMIT = 100;
-
 // Send the same email to many recipients for an org. Resolves the org sender
-// once, then sends in batches of 100. Returns which addresses went out and which
-// failed, so the caller can record per-recipient status and meter only real sends.
+// once, then hands the batch to the transport. Returns which addresses went
+// out and which failed, so the caller can record per-recipient status and
+// meter only real sends.
 export async function sendBroadcastEmails(input: {
   orgId: string;
   recipients: string[];
   subject: string;
   html: string;
 }): Promise<BroadcastSendResult> {
-  if (!isConfigured()) {
-    getLogger().info(
-      { orgId: input.orgId, count: input.recipients.length, subject: input.subject },
-      "dev broadcast email",
-    );
-    return { sent: [...input.recipients], failed: [] };
-  }
-
-  const client = getResendClient();
-  if (!client) return { sent: [], failed: [...input.recipients] };
-
   if (await isSendingSuspended(input.orgId)) {
     getLogger().warn(
       { orgId: input.orgId, count: input.recipients.length },
@@ -234,38 +203,20 @@ export async function sendBroadcastEmails(input: {
   }
 
   const sender = await resolveSender(input.orgId);
-  const sent: string[] = [];
-  const failed: string[] = [];
+  const emails: OutgoingEmail[] = input.recipients.map((to) => ({
+    from: sender.from,
+    to,
+    replyTo: sender.replyTo,
+    subject: input.subject,
+    html: input.html,
+    tags: [
+      { name: "org_id", value: input.orgId },
+      { name: "kind", value: "broadcast" },
+    ],
+  }));
 
-  for (let i = 0; i < input.recipients.length; i += BATCH_LIMIT) {
-    const chunk = input.recipients.slice(i, i + BATCH_LIMIT);
-    try {
-      const { error } = await client.batch.send(
-        chunk.map((to) => ({
-          from: sender.from,
-          to,
-          ...(sender.replyTo ? { replyTo: sender.replyTo } : {}),
-          subject: input.subject,
-          html: input.html,
-          tags: [
-            { name: "org_id", value: input.orgId },
-            { name: "kind", value: "broadcast" },
-          ],
-        })),
-      );
-      if (error) {
-        failed.push(...chunk);
-        getLogger().warn({ err: error, orgId: input.orgId }, "broadcast batch send failed");
-      } else {
-        sent.push(...chunk);
-      }
-    } catch (err) {
-      failed.push(...chunk);
-      getLogger().warn({ err, orgId: input.orgId }, "broadcast batch send threw");
-    }
-  }
-
-  return { sent, failed };
+  const result = await getEmailTransport().sendBatch(emails);
+  return { sent: result.sent.map((e) => e.to), failed: result.failed.map((e) => e.to) };
 }
 
 // Make a display name safe for an email header. First strip quotes, backslashes,
