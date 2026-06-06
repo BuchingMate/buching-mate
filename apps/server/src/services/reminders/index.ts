@@ -9,7 +9,7 @@ import {
 } from "../../db/schema";
 import { getLogger } from "../../observability/request-context";
 import { buildEventIcs } from "../../lib/ics";
-import { eventStartUtc } from "../../lib/event-time";
+import { eventStartUtc, formatEventDateTime } from "../../lib/event-time";
 import { getJoinUrlForRegistration } from "../video";
 import { getSuspendedOrgIds, sendTenantEmail } from "../email/mailer";
 
@@ -75,9 +75,8 @@ function renderReminderHtml(input: {
   eventTitle: string;
   orgName: string;
   whenLabel: string;
-  eventDate: string;
-  eventTime: string;
-  timezone: string;
+  dateLabel: string;
+  timeLabel: string;
   location: string | null;
   joinUrl: string | null;
 }) {
@@ -92,7 +91,7 @@ function renderReminderHtml(input: {
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:480px;background:#ffffff;border-radius:12px;border:1px solid #e2e8f0;overflow:hidden;"><tr><td style="padding:32px;">
 <h1 style="margin:0 0 12px 0;font-size:22px;font-weight:600;">Reminder: ${escapeHtml(input.eventTitle)}</h1>
 <p style="margin:0 0 16px 0;font-size:15px;line-height:1.55;color:#475569;">Hi ${escapeHtml(input.attendeeName)}, your event ${escapeHtml(input.whenLabel)} at ${escapeHtml(input.orgName)}.</p>
-<p style="margin:0 0 4px 0;font-size:14px;color:#475569;">${escapeHtml(input.eventDate)} at ${escapeHtml(input.eventTime)} (${escapeHtml(input.timezone)})</p>
+<p style="margin:0 0 4px 0;font-size:14px;color:#475569;">${escapeHtml(input.dateLabel)} &middot; ${escapeHtml(input.timeLabel)}</p>
 ${locationRow}
 <div style="margin:20px 0 0 0;">${joinButton}</div>
 </td></tr></table></td></tr></table></body></html>`.trim();
@@ -105,8 +104,6 @@ async function sendReminder(input: {
   eventTitle: string;
   orgName: string;
   kind: "t24h" | "t1h";
-  eventDate: string;
-  eventTime: string;
   timezone: string;
   location: string | null;
   joinUrl: string | null;
@@ -117,6 +114,11 @@ async function sendReminder(input: {
   registrationId: string;
 }) {
   const whenLabel = input.kind === "t24h" ? "is tomorrow" : "starts in 1 hour";
+  const { dateLabel, timeLabel } = formatEventDateTime(
+    input.startUtc,
+    input.endUtc,
+    input.timezone,
+  );
   const ics = buildEventIcs({
     uid: `${input.eventId}@buchingmate`,
     title: input.eventTitle,
@@ -136,7 +138,7 @@ async function sendReminder(input: {
       input.kind === "t24h"
         ? `Reminder: ${input.eventTitle} is tomorrow`
         : `Starting soon: ${input.eventTitle} in 1 hour`,
-    html: renderReminderHtml({ ...input, whenLabel }),
+    html: renderReminderHtml({ ...input, whenLabel, dateLabel, timeLabel }),
     attachments: [
       {
         filename: "event.ics",
@@ -172,8 +174,6 @@ export async function dispatchDueReminders(): Promise<{ sent: number }> {
         eventTitle: row.event.title,
         orgName: row.org.name,
         kind,
-        eventDate: row.event.date,
-        eventTime: row.event.time.slice(0, 5),
         timezone: row.event.timezone,
         location: row.event.location,
         joinUrl,

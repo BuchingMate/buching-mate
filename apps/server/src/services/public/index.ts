@@ -154,8 +154,7 @@ export async function registerForPublicEvent(
       attendeeName: attendeeRows[0].name,
       eventTitle: event.title,
       orgName: publicOrg.org.name,
-      eventDate: event.date,
-      eventTime: event.time,
+      timezone: event.timezone,
       location: event.location,
       registrationId: outcome.registration.id,
       joinUrl,
@@ -163,6 +162,7 @@ export async function registerForPublicEvent(
       endUtc,
       eventId: event.id,
       description: event.description ?? null,
+      manageUrl: `${publicOrigin}/me`,
     });
   }
 

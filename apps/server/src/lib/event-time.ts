@@ -67,6 +67,47 @@ export function durationMinutes(start: Date, end: Date): number {
   return Math.max(1, Math.round((end.getTime() - start.getTime()) / 60_000));
 }
 
+/**
+ * Attendee-facing date/time labels for emails, rendered in the event's own
+ * timezone. Returns e.g. dateLabel "Friday, June 6, 2026" and timeLabel
+ * "3:00 – 4:00 PM GMT+10". When the event crosses midnight in its timezone the
+ * range would mislead, so only the start time is shown.
+ */
+export function formatEventDateTime(
+  startUtc: Date,
+  endUtc: Date | null,
+  timezone: string,
+): { dateLabel: string; timeLabel: string } {
+  const dateLabel = new Intl.DateTimeFormat("en-US", {
+    timeZone: timezone,
+    weekday: "long",
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  }).format(startUtc);
+
+  const timeFmt = new Intl.DateTimeFormat("en-US", {
+    timeZone: timezone,
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  });
+  const tzName =
+    new Intl.DateTimeFormat("en-US", { timeZone: timezone, timeZoneName: "short" })
+      .formatToParts(startUtc)
+      .find((p) => p.type === "timeZoneName")?.value ?? timezone;
+
+  const sameDay =
+    endUtc &&
+    utcToZonedWallClock(startUtc, timezone).date === utcToZonedWallClock(endUtc, timezone).date;
+  const timeLabel = sameDay
+    ? `${timeFmt.format(startUtc)} – ${timeFmt.format(endUtc)} ${tzName}`
+    : `${timeFmt.format(startUtc)} ${tzName}`;
+  // Some ICU builds emit a narrow no-break space before AM/PM; normalize so
+  // email output and tests are stable across runtimes.
+  return { dateLabel, timeLabel: timeLabel.replace(/[\u202F\u00A0]/g, " ") };
+}
+
 /** Inverse of zonedWallClockToUtc: a UTC instant → wall-clock date/time strings in `timezone`. */
 export function utcToZonedWallClock(
   instant: Date,

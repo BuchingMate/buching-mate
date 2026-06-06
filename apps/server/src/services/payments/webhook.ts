@@ -11,6 +11,7 @@ import {
 } from "../../db/schema";
 import { getLogger } from "../../observability/request-context";
 import { eventStartUtc, eventEndUtc } from "../../lib/event-time";
+import { orgWebOrigin } from "../../env";
 import { getAdapter, isAdapterAvailable } from "../../payments/registry";
 import { InvalidSignatureError, type NormalizedPaymentEvent } from "../../payments/adapter";
 import { sendBookingConfirmationEmail } from "../registrations/email";
@@ -30,15 +31,15 @@ type ConfirmationEmail = {
   attendeeName: string;
   eventTitle: string;
   orgName: string;
-  eventDate: string;
-  eventTime: string;
+  timezone: string;
   location: string | null;
   registrationId: string;
   joinUrl?: string | null;
-  startUtc?: Date | null;
-  endUtc?: Date | null;
+  startUtc: Date;
+  endUtc: Date;
   eventId?: string;
   description?: string | null;
+  manageUrl?: string | null;
 };
 
 export async function handleWebhook(input: {
@@ -176,6 +177,7 @@ async function markPaid(
       attendeeName: attendees.name,
       eventTitle: eventsTable.title,
       orgName: organization.name,
+      orgSlug: organization.slug,
       eventDate: eventsTable.date,
       eventTime: eventsTable.time,
       location: eventsTable.location,
@@ -211,13 +213,22 @@ async function markPaid(
   const endUtc =
     eventEndUtc(details.endDate, details.endTime, details.timezone) ??
     new Date(startUtc.getTime() + Math.max(1, details.duration) * 60_000);
-  const { duration: _d, endDate: _ed, endTime: _et, timezone: _tz, ...emailFields } = details;
+  const {
+    duration: _d,
+    endDate: _ed,
+    endTime: _et,
+    eventDate: _date,
+    eventTime: _time,
+    orgSlug,
+    ...emailFields
+  } = details;
   return {
     ...emailFields,
     registrationId: registration.id,
     joinUrl,
     startUtc,
     endUtc,
+    manageUrl: orgSlug ? `${orgWebOrigin(orgSlug)}/me` : null,
   };
 }
 

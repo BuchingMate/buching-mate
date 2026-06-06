@@ -96,6 +96,14 @@ export const GOOGLE_MAPS_API_KEY = Bun.env.GOOGLE_MAPS_API_KEY ?? "";
 export const PUBLIC_SITE_URL = Bun.env.PUBLIC_SITE_URL ?? WEB_URL;
 export const BETTER_AUTH_URL = SERVER_URL;
 
+// Browser-facing origin for one org's public pages (slug subdomain on the web
+// host), e.g. "http://demo-org.lvh.me:5678". Used when building attendee links
+// outside a request context (payment webhooks, schedulers).
+export function orgWebOrigin(slug: string): string {
+  const base = new URL(WEB_URL);
+  return `${base.protocol}//${slug}.${base.host}`;
+}
+
 function parseUrl(u: string) {
   try {
     return new URL(u);
