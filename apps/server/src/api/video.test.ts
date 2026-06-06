@@ -312,6 +312,7 @@ describe("POST /api/events/:id/registrations/import", () => {
         date: "2026-06-15",
         time: "10:00:00",
         duration: 60,
+        videoProvider: null,
       },
       cookie: fx.cookie,
       orgId: fx.orgId,

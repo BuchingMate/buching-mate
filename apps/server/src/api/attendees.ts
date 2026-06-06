@@ -52,7 +52,15 @@ export const attendeeRoutes = new Hono<ApiEnv>()
   .post("/", requireRole("manager"), async (c) => {
     const input = parseCreateAttendee(await readJson(c));
     if (typeof input === "string") return apiError(c, 400, "invalid_attendee", input);
-    return c.json({ attendee: await createAttendee(c.var.orgId, input) }, 201);
+    try {
+      return c.json({ attendee: await createAttendee(c.var.orgId, input) }, 201);
+    } catch (err) {
+      // (orgId, email) is unique — surface a duplicate as a clean 409.
+      if (err && typeof err === "object" && "code" in err && err.code === "23505") {
+        return apiError(c, 409, "duplicate_attendee", "An attendee with this email already exists");
+      }
+      throw err;
+    }
   })
   .get("/:attendeeId", async (c) => {
     const attendee = await getAttendee(c.var.orgId, c.req.param("attendeeId"));

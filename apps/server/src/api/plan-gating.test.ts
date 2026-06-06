@@ -8,6 +8,7 @@ const validEvent = {
   date: "2026-06-01",
   time: "10:00:00",
   duration: 60,
+  videoProvider: null,
 };
 
 describe("free plan limits", () => {

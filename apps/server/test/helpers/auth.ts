@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { auth } from "../../src/auth";
 import { db } from "../../src/db";
 import { member, organization, user as userTable } from "../../src/db/schema";
@@ -41,10 +41,21 @@ export async function signUpUser(): Promise<SignedUpUser> {
     throw new Error(`signUpEmail failed: ${res.status} ${await res.text()}`);
   }
 
-  const cookie = extractCookieHeader(res);
   const rows = await db.select().from(userTable).where(eq(userTable.email, email)).limit(1);
   const userId = rows[0]?.id;
   if (!userId) throw new Error("user not found after signup");
+
+  // The app requires email verification, so signUpEmail issues no session. Mark
+  // the user verified and sign in to obtain a real session cookie for tests.
+  await db.update(userTable).set({ emailVerified: true }).where(eq(userTable.id, userId));
+  const signIn = await auth.api.signInEmail({
+    body: { email, password },
+    asResponse: true,
+  });
+  if (!signIn.ok) {
+    throw new Error(`signInEmail failed: ${signIn.status} ${await signIn.text()}`);
+  }
+  const cookie = extractCookieHeader(signIn);
 
   return { userId, email, cookie };
 }
@@ -66,16 +77,34 @@ export async function signUpAndCreateOrg(): Promise<OrgFixture> {
   return { ...owner, orgId: org.id };
 }
 
-export async function addUserToOrg(orgId: string, role: OrgRole = "viewer"): Promise<SignedUpUser> {
+export interface OrgMemberFixture extends SignedUpUser {
+  memberId: string;
+}
+
+export async function addUserToOrg(
+  orgId: string,
+  role: OrgRole = "viewer",
+): Promise<OrgMemberFixture> {
   const u = await signUpUser();
+  const memberId = crypto.randomUUID();
   await db.insert(member).values({
-    id: crypto.randomUUID(),
+    id: memberId,
     userId: u.userId,
     organizationId: orgId,
     role,
     createdAt: new Date(),
   });
-  return u;
+  return { ...u, memberId };
+}
+
+export async function getMemberId(orgId: string, userId: string): Promise<string> {
+  const rows = await db
+    .select({ id: member.id })
+    .from(member)
+    .where(and(eq(member.organizationId, orgId), eq(member.userId, userId)))
+    .limit(1);
+  if (!rows[0]) throw new Error("member not found");
+  return rows[0].id;
 }
 
 export async function getOrgSlug(orgId: string): Promise<string> {
