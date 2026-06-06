@@ -230,13 +230,13 @@ function Events() {
           </Tabs>
 
           <div className="flex flex-wrap items-center gap-2 sm:justify-end">
-            <div className="relative min-w-0 flex-1 sm:flex-none">
+            <div className="relative min-w-40 flex-1 sm:flex-none">
               <Search className="absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
               <Input
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
                 placeholder="Search events"
-                className="h-8 min-w-40 pl-8 text-sm sm:w-48"
+                className="h-8 w-full pl-8 text-sm sm:w-48"
               />
             </div>
 

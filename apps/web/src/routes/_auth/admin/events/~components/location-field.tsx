@@ -5,6 +5,15 @@ import { geoAutocomplete, geoPlaceDetails, type PlaceSuggestion } from "@/lib/ge
 
 export type RecentLocation = { address: string; lat: string; lng: string };
 
+// Places autocomplete session id. crypto.randomUUID only exists in secure
+// contexts (https / localhost) — plain-http dev hosts like lvh.me lack it, so
+// fall back to a random string; uniqueness is all the Places API needs.
+function newSessionId(): string {
+  return typeof crypto.randomUUID === "function"
+    ? crypto.randomUUID()
+    : `${Math.random().toString(36).slice(2)}${Date.now().toString(36)}`;
+}
+
 // Presets that just prep the field for a pasted link (no live integration).
 const PASTE_PRESETS = [
   { label: "Google Meet", hint: "Paste your Google Meet link" },
@@ -37,7 +46,7 @@ export function LocationField({
   const [open, setOpen] = useState(false);
   const [placeholder, setPlaceholder] = useState("Search an address or paste a link");
   const inputRef = useRef<HTMLInputElement>(null);
-  const sessionRef = useRef<string>(crypto.randomUUID());
+  const sessionRef = useRef<string>(newSessionId());
   const skipRef = useRef(false);
 
   useEffect(() => {
@@ -85,7 +94,7 @@ export function LocationField({
       onChange(fallback);
       onCoords("", "");
     }
-    sessionRef.current = crypto.randomUUID();
+    sessionRef.current = newSessionId();
   };
 
   const pickRecent = (r: RecentLocation) => {
