@@ -49,6 +49,16 @@ Full suite now: **283 pass, 0 fail.**
 - Billing portal / checkout endpoints
 - Assets upload (R2)
 
+### Event cancellation — pending spec (`src/api/event-cancellation.test.ts`, skipped)
+
+Cancelling an **event** (status → `cancelled`) today only detaches the Zoom meeting. It does NOT guard new bookings or cascade to existing registrations. Expected behavior, encoded as skipped failing tests:
+
+- should reject a new registration for a cancelled event (currently `createRegistration` ignores `event.status` → silently creates) — **real bug**
+- should reject a registration for a completed event too
+- should cancel existing registrations when the event is cancelled
+
+Not yet covered (product decisions): attendee cancellation email, refund of paid registrations, public page showing "Cancelled". Unskip the file to drive the implementation.
+
 ### Edge cases worth adding
 
 - Registration: promote from waitlist when a confirmed spot frees up
