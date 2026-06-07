@@ -59,6 +59,42 @@ export async function sendEventReviewApprovedEmail(input: {
   });
 }
 
+// Sent to every active registrant when the organizer cancels an event. Paid
+// attendees are promised a refund — the organizer issues it manually from the
+// registration sheet (Stripe Connect: the money sits in their account).
+export function renderEventCancelledEmail(input: {
+  attendeeName: string;
+  eventTitle: string;
+  orgName: string;
+  refundExpected: boolean;
+}): { subject: string; html: string } {
+  const refundRow = input.refundExpected
+    ? `<p style="margin:0 0 16px 0;font-size:15px;line-height:1.55;color:#475569;">Your payment will be refunded to your original payment method.</p>`
+    : "";
+  const body = `<h1 style="margin:0 0 12px 0;font-size:22px;font-weight:600;">Event cancelled</h1>
+<p style="margin:0 0 16px 0;font-size:15px;line-height:1.55;color:#475569;">Hi ${escapeHtml(input.attendeeName)}, ${escapeHtml(input.orgName)} has cancelled “${escapeHtml(input.eventTitle)}”. Your registration is no longer active.</p>
+${refundRow}`;
+  return { subject: `Event cancelled: ${input.eventTitle}`, html: shell(body) };
+}
+
+export async function sendEventCancelledEmail(input: {
+  orgId: string;
+  to: string;
+  attendeeName: string;
+  eventTitle: string;
+  orgName: string;
+  refundExpected: boolean;
+}) {
+  const { subject, html } = renderEventCancelledEmail(input);
+  await sendTenantEmail({
+    orgId: input.orgId,
+    kind: "event-cancelled",
+    to: input.to,
+    subject,
+    html,
+  });
+}
+
 export async function sendEventReviewRejectedEmail(input: {
   orgId: string;
   to: string;

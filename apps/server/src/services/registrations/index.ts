@@ -14,6 +14,7 @@ import { expireStalePendingPayments } from "../payments/expire";
 export type CreateRegistrationOutcome =
   | { type: "created" | "resume"; registration: RegistrationDto }
   | "event_not_found"
+  | "event_not_bookable"
   | "attendee_not_found"
   | "duplicate_registration";
 
@@ -97,12 +98,19 @@ export async function createRegistration(
   await expireStalePendingPayments(orgId, input.eventId);
 
   const eventRows = await db
-    .select({ id: events.id, maxCapacity: events.maxCapacity, price: events.price })
+    .select({
+      id: events.id,
+      maxCapacity: events.maxCapacity,
+      price: events.price,
+      status: events.status,
+    })
     .from(events)
     .where(and(eq(events.orgId, orgId), eq(events.id, input.eventId)))
     .limit(1);
   if (!eventRows[0]) return "event_not_found";
   const event = eventRows[0];
+  // Cancelled and completed events take no new registrations.
+  if (event.status !== "upcoming") return "event_not_bookable";
 
   const attendeeRows = await db
     .select({ id: attendees.id })

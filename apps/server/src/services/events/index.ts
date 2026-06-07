@@ -10,14 +10,16 @@ import { db } from "../../db";
 import {
   eventResources,
   events,
+  attendees,
   publicAssets,
   resources,
   registrations,
   user,
 } from "../../db/schema";
-import { member } from "../../db/auth-schema";
+import { member, organization } from "../../db/auth-schema";
 import { WEB_URL } from "../../env";
 import {
+  sendEventCancelledEmail,
   sendEventReviewApprovedEmail,
   sendEventReviewRejectedEmail,
   sendEventReviewRequestedEmail,
@@ -412,6 +414,58 @@ export async function createEvent(
   return withVideo(toEventDto(rows[0], 0, 0), video);
 }
 
+// Flip every active registration of a cancelled event to cancelled and email
+// each attendee. Sends are fire-and-forget (the mailer logs its own failures)
+// so a slow provider can't block the PATCH response.
+async function cancelEventRegistrations(orgId: string, eventId: string, eventTitle: string) {
+  const cancelled = await db
+    .update(registrations)
+    .set({ status: "cancelled", updatedAt: new Date() })
+    .where(
+      and(
+        eq(registrations.orgId, orgId),
+        eq(registrations.eventId, eventId),
+        inArray(registrations.status, ["confirmed", "pending", "waitlisted"]),
+      ),
+    )
+    .returning({
+      attendeeId: registrations.attendeeId,
+      paymentStatus: registrations.paymentStatus,
+    });
+  if (cancelled.length === 0) return;
+
+  const orgRows = await db
+    .select({ name: organization.name })
+    .from(organization)
+    .where(eq(organization.id, orgId))
+    .limit(1);
+  const orgName = orgRows[0]?.name ?? "The organizer";
+
+  const contactRows = await db
+    .select({ id: attendees.id, name: attendees.name, email: attendees.email })
+    .from(attendees)
+    .where(
+      inArray(
+        attendees.id,
+        cancelled.map((r) => r.attendeeId),
+      ),
+    );
+  const contacts = new Map(contactRows.map((r) => [r.id, r]));
+
+  for (const reg of cancelled) {
+    const contact = contacts.get(reg.attendeeId);
+    if (!contact) continue;
+    void sendEventCancelledEmail({
+      orgId,
+      to: contact.email,
+      attendeeName: contact.name,
+      eventTitle,
+      orgName,
+      refundExpected: reg.paymentStatus === "paid",
+    });
+  }
+}
+
 export async function updateEvent(
   orgId: string,
   eventId: string,
@@ -520,6 +574,14 @@ export async function updateEvent(
   }
 
   const next = rows[0];
+
+  // Cancelling an event cascades to its active registrations and notifies the
+  // affected attendees. Paid attendees are promised a refund; the organizer
+  // issues those manually per registration (Stripe Connect — their account).
+  if (prev && prev.status !== "cancelled" && next.status === "cancelled") {
+    await cancelEventRegistrations(orgId, next.id, next.title);
+  }
+
   if (prev) {
     const currentVideo = await getEventVideo(orgId, next.id);
     const hasVideo = currentVideo != null;

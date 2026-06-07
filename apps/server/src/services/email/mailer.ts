@@ -86,6 +86,7 @@ export type TenantEmailKind =
   | "review-rejected"
   | "booking-resume"
   | "booking-confirmed"
+  | "event-cancelled"
   | "event-reminder"
   | "broadcast";
 

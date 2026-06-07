@@ -91,6 +91,8 @@ export const registrationRoutes = new Hono<ApiEnv>()
     const outcome = await createRegistration(c.var.orgId, input);
     if (outcome === "event_not_found")
       return apiError(c, 404, "event_not_found", "Event not found");
+    if (outcome === "event_not_bookable")
+      return apiError(c, 409, "event_not_bookable", "Event is cancelled or completed");
     if (outcome === "attendee_not_found")
       return apiError(c, 404, "attendee_not_found", "Attendee not found");
     if (outcome === "duplicate_registration") {

@@ -3,12 +3,10 @@ import { signUpAndCreateOrg } from "../../test/helpers/auth";
 import { seedAttendee, seedEvent, seedRegistration } from "../../test/helpers/data";
 import { asJson, req } from "../../test/helpers/request";
 
-// PENDING SPEC — expected behavior when an EVENT (not a single registration) is
-// cancelled. Today `updateEvent` only detaches the Zoom meeting; it does not
-// guard new registrations or cascade to existing ones. These tests encode the
-// requirement and currently FAIL, so they are skipped to keep CI green. Remove
-// `.skip` to drive the implementation (TDD red → green). See TESTING_GAPS.md.
-describe.skip("event cancellation (pending spec)", () => {
+// Expected behavior when an EVENT (not a single registration) is cancelled:
+// new registrations are refused and existing active ones cascade to cancelled
+// (with attendee notification emails — covered in events/email tests).
+describe("event cancellation", () => {
   test("should reject a new registration for a cancelled event", async () => {
     const fx = await signUpAndCreateOrg();
     const event = await seedEvent(fx.orgId, { status: "cancelled", maxCapacity: 10 });
