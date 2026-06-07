@@ -23,7 +23,9 @@ export function VideoTab() {
   const connectMutation = useMutation({
     mutationFn: () => startZoomConnect(),
     onSuccess: (data) => {
-      window.location.assign(data.url);
+      // New tab keeps the settings page open; fall back to same-tab if blocked.
+      const popup = window.open(data.url, "_blank");
+      if (!popup) window.location.assign(data.url);
     },
   });
 

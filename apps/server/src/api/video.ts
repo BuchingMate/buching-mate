@@ -22,8 +22,10 @@ import {
   markZoomRevokedByZoomUser,
   upsertZoomConnection,
 } from "../services/video";
+import { eq } from "drizzle-orm";
 import { db } from "../db";
 import { webhookEvents } from "../db/schema";
+import { organization } from "../db/auth-schema";
 
 const ZOOM: VideoProvider = "zoom";
 
@@ -155,7 +157,17 @@ videoRoutes.get("/callback/:provider", requireAuth, async (c) => {
 
   logEvent("video.connection.upserted", { provider: providerParam, orgId: state.orgId });
 
-  return c.redirect(`${WEB_URL}/admin?connected=${providerParam}`, 302);
+  // Send the tab back to the org's settings page; ?connected=zoom shows the
+  // success banner and refetches the connection status.
+  const [org] = await db
+    .select({ slug: organization.slug })
+    .from(organization)
+    .where(eq(organization.id, state.orgId))
+    .limit(1);
+  const target = org?.slug
+    ? `${WEB_URL}/admin/${org.slug}/settings?tab=integrations&connected=${providerParam}`
+    : `${WEB_URL}/admin?connected=${providerParam}`;
+  return c.redirect(target, 302);
 });
 
 // Authenticated org routes.
