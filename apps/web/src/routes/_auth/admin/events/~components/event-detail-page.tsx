@@ -21,7 +21,7 @@ import { eventRegistrationsQueryOptions } from "@/queries/registrations";
 import { attendeesQueryOptions } from "@/queries/attendees";
 import { eventResourcesQueryOptions, resourcesQueryOptions } from "@/queries/resources";
 import { canDeleteEvents, canManageEvents } from "@/lib/permissions";
-import { getOrgPublicUrl } from "@/lib/public";
+import { getPublicEventUrl } from "@/lib/public";
 import { useUpdateEvent } from "@/hooks/use-events";
 import { useOrgCurrency } from "@/hooks/use-org";
 import { useReplaceEventResources } from "@/hooks/use-resources";
@@ -100,7 +100,7 @@ export function EventDetailPage({
   const assignedResources = eventResourcesData?.resources ?? [];
   const resourceById = new Map(allResources.map((r) => [r.id, r]));
 
-  const publicEventUrl = orgSlug ? getOrgPublicUrl(orgSlug, `/events/${event.id}`) : null;
+  const publicEventUrl = getPublicEventUrl(event.id);
   const registrations = registrationsData?.registrations ?? [];
   const attendees = attendeesData?.attendees ?? [];
 

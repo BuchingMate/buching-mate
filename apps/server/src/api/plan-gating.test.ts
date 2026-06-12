@@ -75,6 +75,37 @@ describe("team plan removes free plan limits", () => {
   });
 });
 
+describe("custom domain plan gating", () => {
+  test("should block adding a custom domain on the free plan", async () => {
+    const fx = await signUpAndCreateOrg();
+    const res = await req("/api/org/custom-domain", {
+      method: "POST",
+      body: { domain: `gate-${Date.now()}.example.com` },
+      cookie: fx.cookie,
+      orgId: fx.orgId,
+    });
+    expect(res.status).toBe(402);
+  });
+
+  test("should allow adding a custom domain on the team plan", async () => {
+    const fx = await signUpAndCreateOrg();
+    await setOrgPlan(fx.orgId, "team");
+    const res = await req("/api/org/custom-domain", {
+      method: "POST",
+      body: { domain: `gate-${Date.now()}-team.example.com` },
+      cookie: fx.cookie,
+      orgId: fx.orgId,
+    });
+    expect(res.status).toBe(200);
+    const cleanup = await req("/api/org/custom-domain", {
+      method: "DELETE",
+      cookie: fx.cookie,
+      orgId: fx.orgId,
+    });
+    expect(cleanup.status).toBe(200);
+  });
+});
+
 describe("enterprise plan removes free plan limits", () => {
   test("should allow more than one event per month on the enterprise plan", async () => {
     const fx = await signUpAndCreateOrg();

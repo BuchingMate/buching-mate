@@ -68,4 +68,41 @@ describe("renderBroadcastEmail", () => {
     expect(html).not.toContain("<script>");
     expect(html).toContain("&lt;script&gt;");
   });
+
+  test("should render the unsubscribe link and postal address in the footer", () => {
+    const html = renderBroadcastEmail({
+      subject: "Hi",
+      bodyHtml: "x",
+      orgName: "Acme",
+      branding: EMPTY_EMAIL_BRANDING,
+      unsubscribeUrl: "https://api.example/api/public/unsubscribe?token=abc",
+      businessAddress: "1 Main St, Sydney NSW 2000",
+    });
+    expect(html).toContain('href="https://api.example/api/public/unsubscribe?token=abc"');
+    expect(html).toContain("Unsubscribe");
+    expect(html).toContain("1 Main St, Sydney NSW 2000");
+  });
+
+  test("should omit the unsubscribe line when no url is given (live preview)", () => {
+    const html = renderBroadcastEmail({
+      subject: "Hi",
+      bodyHtml: "x",
+      orgName: "Acme",
+      branding: EMPTY_EMAIL_BRANDING,
+    });
+    expect(html).not.toContain("Unsubscribe");
+  });
+
+  test("should escape a postal address that contains markup", () => {
+    const html = renderBroadcastEmail({
+      subject: "Hi",
+      bodyHtml: "x",
+      orgName: "Acme",
+      branding: EMPTY_EMAIL_BRANDING,
+      unsubscribeUrl: "https://api.example/u?token=abc",
+      businessAddress: "<b>HQ</b>",
+    });
+    expect(html).not.toContain("<b>HQ</b>");
+    expect(html).toContain("&lt;b&gt;HQ&lt;/b&gt;");
+  });
 });

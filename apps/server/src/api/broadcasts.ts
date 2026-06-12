@@ -13,7 +13,7 @@ import {
 
 function parseAudience(input: unknown): BroadcastAudience | null {
   if (!isRecord(input)) return null;
-  if (input.type === "all_attendees") return { type: "all_attendees" };
+  if (input.type === "calendar_subscribers") return { type: "calendar_subscribers" };
   if (input.type === "event_guests" && typeof input.eventId === "string" && input.eventId.trim()) {
     return { type: "event_guests", eventId: input.eventId };
   }

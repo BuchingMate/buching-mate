@@ -10,8 +10,17 @@ import {
 import { getLogger } from "../../observability/request-context";
 import { buildEventIcs } from "../../lib/ics";
 import { eventStartUtc, formatEventDateTime } from "../../lib/event-time";
+import { PUBLIC_SITE_URL } from "../../env";
 import { getJoinUrlForRegistration } from "../video";
 import { getSuspendedOrgIds, sendTenantEmail } from "../email/mailer";
+import {
+  emailButton,
+  escapeHtml,
+  loadTenantBrand,
+  renderEmailShell,
+  renderEmailText,
+  type EmailBrand,
+} from "../email/shell";
 
 const KIND_WINDOWS: Record<"t24h" | "t1h", { lookAheadMs: number; windowMs: number }> = {
   t24h: { lookAheadMs: 24 * 3600 * 1000, windowMs: 60 * 60 * 1000 },
@@ -61,16 +70,8 @@ async function listDueRegistrations(kind: "t24h" | "t1h") {
   return rows.filter((r) => !sentSet.has(r.reg.id));
 }
 
-function escapeHtml(value: string) {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
-
-function renderReminderHtml(input: {
+// Exported for tests: pure render, no I/O.
+export function renderReminderEmail(input: {
   attendeeName: string;
   eventTitle: string;
   orgName: string;
@@ -79,22 +80,60 @@ function renderReminderHtml(input: {
   timeLabel: string;
   location: string | null;
   joinUrl: string | null;
-}) {
+  manageUrl: string | null;
+  brand?: EmailBrand | null;
+}): { html: string; text: string } {
+  const brand = input.brand ?? { name: input.orgName, logoUrl: null, accentColor: null };
   const joinButton = input.joinUrl
-    ? `<a href="${input.joinUrl}" style="display:inline-block;background:#2563eb;color:#ffffff;text-decoration:none;padding:11px 20px;border-radius:8px;font-size:14px;font-weight:500;">Join meeting</a>`
+    ? `<div style="margin:0 0 20px 0;">${emailButton(input.joinUrl, "Join meeting", "#2563eb")}<p style="margin:8px 0 0 0;font-size:12px;color:#94a3b8;word-break:break-all;">${escapeHtml(input.joinUrl)}</p></div>`
     : "";
-  const locationRow = input.location
-    ? `<p style="margin:8px 0 0 0;font-size:14px;color:#475569;">Location: ${escapeHtml(input.location)}</p>`
+  const locationLabel = input.location ?? (input.joinUrl ? "Online" : "To be announced");
+  const locationCell = input.location
+    ? `<a href="https://www.google.com/maps/search/?api=1&amp;query=${encodeURIComponent(input.location)}" style="color:#0f172a;text-decoration:underline;">${escapeHtml(input.location)}</a>`
+    : escapeHtml(locationLabel);
+  const detailRows = [
+    ["Date", escapeHtml(input.dateLabel)],
+    ["Time", escapeHtml(input.timeLabel)],
+    ["Location", locationCell],
+  ]
+    .map(
+      ([label, value], i, all) => `
+                  <tr>
+                    <td style="padding:${i === 0 ? "14px" : "8px"} 0 ${i === all.length - 1 ? "14px" : "8px"} 0;color:#64748b;font-size:14px;vertical-align:top;">${label}</td>
+                    <td style="padding:${i === 0 ? "14px" : "8px"} 0 ${i === all.length - 1 ? "14px" : "8px"} 0;color:#0f172a;font-size:14px;text-align:right;">${value}</td>
+                  </tr>`,
+    )
+    .join("");
+  const manageLink = input.manageUrl
+    ? `<a href="${escapeHtml(input.manageUrl)}" style="color:#475569;text-decoration:underline;">Manage your booking</a> &middot; `
     : "";
-  return `<!DOCTYPE html><html><body style="margin:0;padding:0;background:#f6f7f9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:#0f172a;">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="padding:32px 16px;"><tr><td align="center">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:480px;background:#ffffff;border-radius:12px;border:1px solid #e2e8f0;overflow:hidden;"><tr><td style="padding:32px;">
-<h1 style="margin:0 0 12px 0;font-size:22px;font-weight:600;">Reminder: ${escapeHtml(input.eventTitle)}</h1>
-<p style="margin:0 0 16px 0;font-size:15px;line-height:1.55;color:#475569;">Hi ${escapeHtml(input.attendeeName)}, your event ${escapeHtml(input.whenLabel)} at ${escapeHtml(input.orgName)}.</p>
-<p style="margin:0 0 4px 0;font-size:14px;color:#475569;">${escapeHtml(input.dateLabel)} &middot; ${escapeHtml(input.timeLabel)}</p>
-${locationRow}
-<div style="margin:20px 0 0 0;">${joinButton}</div>
-</td></tr></table></td></tr></table></body></html>`.trim();
+  const body = `
+                <h1 style="margin:0 0 12px 0;font-size:22px;font-weight:600;color:#0f172a;">Reminder: ${escapeHtml(input.eventTitle)}</h1>
+                <p style="margin:0 0 20px 0;font-size:15px;line-height:1.55;color:#475569;">Hi ${escapeHtml(input.attendeeName)}, your event ${escapeHtml(input.whenLabel)} at ${escapeHtml(input.orgName)}.</p>
+                ${joinButton}
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-top:1px solid #e2e8f0;border-bottom:1px solid #e2e8f0;margin:0 0 24px 0;">
+                  ${detailRows}
+                </table>`;
+  const html = renderEmailShell({
+    brand,
+    preheader: `${input.eventTitle} ${input.whenLabel} — ${input.dateLabel} · ${input.timeLabel}`,
+    bodyHtml: body,
+    footerHtml: `<p style="margin:0;font-size:12px;color:#94a3b8;">${manageLink}Questions? Just reply to this email.</p>`,
+  });
+  const text = renderEmailText(
+    [
+      `Hi ${input.attendeeName}, your event ${input.whenLabel} at ${input.orgName}.`,
+      "",
+      `Event: ${input.eventTitle}`,
+      `Date: ${input.dateLabel}`,
+      `Time: ${input.timeLabel}`,
+      `Location: ${locationLabel}`,
+      input.joinUrl ? `Join: ${input.joinUrl}` : false,
+      input.manageUrl ? `Manage your booking: ${input.manageUrl}` : false,
+    ],
+    brand,
+  );
+  return { html, text };
 }
 
 async function sendReminder(input: {
@@ -119,6 +158,16 @@ async function sendReminder(input: {
     input.endUtc,
     input.timezone,
   );
+  const brand = await loadTenantBrand(input.orgId);
+  const manageUrl = `${PUBLIC_SITE_URL}/me`;
+  const rendered = renderReminderEmail({
+    ...input,
+    whenLabel,
+    dateLabel,
+    timeLabel,
+    manageUrl,
+    brand,
+  });
   const ics = buildEventIcs({
     uid: `${input.eventId}@buchingmate`,
     title: input.eventTitle,
@@ -138,7 +187,8 @@ async function sendReminder(input: {
       input.kind === "t24h"
         ? `Reminder: ${input.eventTitle} is tomorrow`
         : `Starting soon: ${input.eventTitle} in 1 hour`,
-    html: renderReminderHtml({ ...input, whenLabel, dateLabel, timeLabel }),
+    html: rendered.html,
+    text: rendered.text,
     attachments: [
       {
         filename: "event.ics",

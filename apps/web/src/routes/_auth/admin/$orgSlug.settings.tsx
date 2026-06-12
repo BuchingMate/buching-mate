@@ -21,6 +21,7 @@ import { MembersTab } from "./~components/settings/members-tab";
 import { PaymentsTab } from "./~components/settings/payments-tab";
 import { VideoTab } from "./~components/settings/video-tab";
 import { EmailDomainTab } from "./~components/settings/email-domain-tab";
+import { CustomDomainTab } from "./~components/settings/custom-domain-tab";
 import { BillingTab } from "./~components/settings/billing-tab";
 import { BroadcastPlanCard } from "./~components/settings/broadcast-plan-card";
 import { DangerTab } from "./~components/settings/danger-tab";
@@ -114,6 +115,7 @@ function SettingsTabs({
         <TabsContent value="general" className="mt-6 space-y-6">
           <GeneralTab orgSlug={orgSlug} />
           <CategoriesTab />
+          {showSettings && <CustomDomainTab />}
           {showSettings && <EmailDomainTab />}
         </TabsContent>
 

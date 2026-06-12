@@ -127,7 +127,7 @@ describe("createRegistration", () => {
 
   test("should add the registration to the waitlist when the event is full", async () => {
     const { orgId } = await signUpAndCreateOrg();
-    const event = await seedEvent(orgId, { price: 0, maxCapacity: 1 });
+    const event = await seedEvent(orgId, { price: 0, maxCapacity: 1, waitlistEnabled: true });
     const first = await seedAttendee(orgId);
     const second = await seedAttendee(orgId);
     await seedRegistration(orgId, event.id, first.id, { status: "confirmed" });
@@ -139,6 +139,22 @@ describe("createRegistration", () => {
 
     if (typeof result === "string") throw new Error(`expected created, got ${result}`);
     expect(result.registration.status).toBe("waitlisted");
+  });
+
+  test("should refuse a registration when the event is full and has no waitlist", async () => {
+    const { orgId } = await signUpAndCreateOrg();
+    // waitlistEnabled defaults to false — the waitlist is opt-in per event.
+    const event = await seedEvent(orgId, { price: 0, maxCapacity: 1 });
+    const first = await seedAttendee(orgId);
+    const second = await seedAttendee(orgId);
+    await seedRegistration(orgId, event.id, first.id, { status: "confirmed" });
+
+    const result = await createRegistration(orgId, {
+      eventId: event.id,
+      attendeeId: second.id,
+    });
+
+    expect(result).toBe("event_full");
   });
 
   test("should treat no capacity limit as unlimited spots", async () => {
@@ -164,7 +180,7 @@ describe("createRegistration", () => {
 
   test("should hold a seat for a pending registration so it counts towards capacity", async () => {
     const { orgId } = await signUpAndCreateOrg();
-    const event = await seedEvent(orgId, { price: 5000, maxCapacity: 1 });
+    const event = await seedEvent(orgId, { price: 5000, maxCapacity: 1, waitlistEnabled: true });
     const first = await seedAttendee(orgId);
     const second = await seedAttendee(orgId);
     await seedRegistration(orgId, event.id, first.id, {

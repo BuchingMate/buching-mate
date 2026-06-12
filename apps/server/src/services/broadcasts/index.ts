@@ -15,15 +15,21 @@ import {
   organization,
   registrations,
 } from "../../db/schema";
-import { sendBroadcastEmails } from "../email/mailer";
+import { SERVER_URL } from "../../env";
+import { BUSINESS_ADDRESS } from "../../branding";
+import { createCalendarToken } from "../../lib/calendar-token";
+import { sendBroadcastEmails, type BroadcastMessage } from "../email/mailer";
+import { listCalendarSubscribers } from "../calendar";
 import { getOrgSettings } from "../org";
 import { getUsage, incrementUsage, weekStart } from "../subscription-usage";
 
 // Load what a send needs: the org name and branding that wrap the email, plus the
 // org's effective weekly send cap.
-async function loadSendContext(
-  orgId: string,
-): Promise<{ orgName: string; branding: EmailBranding; weeklyCap: number }> {
+async function loadSendContext(orgId: string): Promise<{
+  orgName: string;
+  branding: EmailBranding;
+  weeklyCap: number;
+}> {
   const [orgRow, settings] = await Promise.all([
     db
       .select({ name: organization.name })
@@ -37,6 +43,12 @@ async function loadSendContext(
     branding: settings.emailBranding,
     weeklyCap: settings.broadcastWeeklyCap,
   };
+}
+
+// Server-hosted one-click unsubscribe link for one recipient of one org.
+function unsubscribeUrl(orgId: string, email: string): string {
+  const token = createCalendarToken({ orgId, email });
+  return `${SERVER_URL}/api/public/unsubscribe?token=${encodeURIComponent(token)}`;
 }
 
 type Recipient = { email: string; attendeeId: string | null };
@@ -113,7 +125,9 @@ export async function createBroadcast(
   return toDto(row);
 }
 
-// Expand an audience into a de-duplicated recipient list.
+// Expand an audience into a de-duplicated recipient list. "event_guests" is the
+// event's confirmed registrants (operational mail); "calendar_subscribers" is
+// the org's opted-in marketing list.
 async function resolveAudience(orgId: string, audience: BroadcastAudience): Promise<Recipient[]> {
   const rows =
     audience.type === "event_guests"
@@ -128,10 +142,7 @@ async function resolveAudience(orgId: string, audience: BroadcastAudience): Prom
               eq(registrations.status, "confirmed"),
             ),
           )
-      : await db
-          .select({ email: attendees.email, attendeeId: attendees.id })
-          .from(attendees)
-          .where(eq(attendees.orgId, orgId));
+      : await listCalendarSubscribers(orgId);
 
   const byEmail = new Map<string, Recipient>();
   for (const row of rows) {
@@ -163,11 +174,12 @@ export async function sendBroadcast(orgId: string, id: string): Promise<SendBroa
   if (!broadcast) return { type: "not_found" };
   if (broadcast.status !== "draft") return { type: "invalid_state" };
 
+  const ctx = await loadSendContext(orgId);
+  const billable = isBillableAudience(broadcast.audience);
+
   const recipients = await resolveAudience(orgId, broadcast.audience);
   if (recipients.length === 0) return { type: "no_recipients" };
 
-  const ctx = await loadSendContext(orgId);
-  const billable = isBillableAudience(broadcast.audience);
   const period = weekStart();
   const used = billable ? await getUsage(orgId, "broadcast_sends", period) : 0;
   if (billable && exceedsWeeklyCap(ctx.weeklyCap, used, recipients.length)) {
@@ -190,17 +202,39 @@ export async function sendBroadcast(orgId: string, id: string): Promise<SendBroa
     )
     .onConflictDoNothing();
 
-  const html = renderBroadcastEmail({
-    subject: broadcast.subject,
-    bodyHtml: broadcast.bodyHtml,
-    orgName: ctx.orgName,
-    branding: ctx.branding,
+  // Billable mail gets a per-recipient unsubscribe link + List-Unsubscribe
+  // headers (RFC 8058 one-click). Event-guest mail shares one plain render.
+  const sharedHtml = billable
+    ? null
+    : renderBroadcastEmail({
+        subject: broadcast.subject,
+        bodyHtml: broadcast.bodyHtml,
+        orgName: ctx.orgName,
+        branding: ctx.branding,
+      });
+  const messages: BroadcastMessage[] = recipients.map((r) => {
+    if (!billable) return { to: r.email, html: sharedHtml! };
+    const url = unsubscribeUrl(orgId, r.email);
+    return {
+      to: r.email,
+      html: renderBroadcastEmail({
+        subject: broadcast.subject,
+        bodyHtml: broadcast.bodyHtml,
+        orgName: ctx.orgName,
+        branding: ctx.branding,
+        unsubscribeUrl: url,
+        businessAddress: BUSINESS_ADDRESS,
+      }),
+      headers: {
+        "List-Unsubscribe": `<${url}>`,
+        "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+      },
+    };
   });
   const result = await sendBroadcastEmails({
     orgId,
-    recipients: recipients.map((r) => r.email),
     subject: broadcast.subject,
-    html,
+    messages,
   });
 
   await Promise.all([

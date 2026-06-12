@@ -77,14 +77,27 @@ export interface EmailDomainDto {
   verifiedAt: string | null;
 }
 
+// "disabled" is set administratively (e.g. plan downgrade); a disabled domain
+// must not resolve to the org.
+export type CustomDomainStatus = "pending" | "verifying" | "active" | "failed" | "disabled";
+
+export interface CustomDomainDto {
+  hostname: string;
+  status: CustomDomainStatus;
+  dnsRecords: EmailDnsRecord[];
+  verifiedAt: string | null;
+}
+
 export type BroadcastKind = "newsletter" | "invitation";
 export type BroadcastStatus = "draft" | "sending" | "sent" | "failed";
 
-// Who a broadcast targets. "event_guests" needs an eventId; "all_attendees"
-// reaches everyone the org has registered before.
+// Who a broadcast targets. "event_guests" needs an eventId and is operational
+// mail to a specific event's confirmed registrants. "calendar_subscribers"
+// reaches everyone who explicitly opted into the org's Calendar — the only
+// audience for marketing, since it carries real consent.
 export type BroadcastAudience =
   | { type: "event_guests"; eventId: string }
-  | { type: "all_attendees" };
+  | { type: "calendar_subscribers" };
 
 export interface BroadcastDto {
   id: string;
@@ -107,9 +120,9 @@ export interface CreateBroadcastRequest {
   audience: BroadcastAudience;
 }
 
-// Weekly send allowance by plan before any add-on. Only newsletters and
-// all-attendee blasts count toward it; sends to a specific event's guests are
-// always free and never counted.
+// Weekly send allowance by plan before any add-on. Only Calendar-subscriber
+// sends count toward it; sends to a specific event's guests are always free
+// and never counted.
 export const FREE_WEEKLY_SENDS = 500;
 export const TEAM_INCLUDED_WEEKLY_SENDS = 5000;
 
@@ -229,6 +242,11 @@ export function renderBroadcastEmail(opts: {
   bodyHtml: string;
   orgName: string;
   branding: EmailBranding;
+  // Per-recipient one-click unsubscribe URL. Required by law on marketing mail;
+  // the live preview passes a placeholder.
+  unsubscribeUrl?: string;
+  // Org's physical postal address, shown in the footer (CAN-SPAM/CASL).
+  businessAddress?: string | null;
 }): string {
   const accent = brandingAccent(opts.branding.accentColor);
   const orgName = escapeBrandingHtml(opts.orgName);
@@ -236,6 +254,21 @@ export function renderBroadcastEmail(opts: {
   const masthead = opts.branding.logoUrl
     ? `<img src="${escapeBrandingHtml(opts.branding.logoUrl)}" alt="${orgName}" style="max-height:34px;display:block;" />`
     : `<span style="font-size:16px;font-weight:600;color:#1f2430;letter-spacing:-0.01em;">${orgName}</span>`;
+  const address = (opts.businessAddress ?? "").trim();
+  // Legally-required footer parts for marketing mail: who sent it, where they
+  // are, and how to opt out. Each line is omitted only when its data is absent
+  // (the send path guarantees address + unsubscribe are present for real sends).
+  const footerLines = [
+    footer ? escapeBrandingHtml(footer) : `Sent by ${orgName}`,
+    address
+      ? `<div style="margin-top:8px;white-space:pre-line;">${escapeBrandingHtml(address)}</div>`
+      : "",
+    opts.unsubscribeUrl
+      ? `<div style="margin-top:8px;"><a href="${escapeBrandingHtml(opts.unsubscribeUrl)}" style="color:#8a8578;text-decoration:underline;">Unsubscribe</a> from these emails.</div>`
+      : "",
+  ]
+    .filter(Boolean)
+    .join("");
 
   return `<!DOCTYPE html>
 <html>
@@ -255,7 +288,7 @@ export function renderBroadcastEmail(opts: {
             <tr>
               <td style="padding:24px 32px 28px 32px;">
                 <div style="border-top:1px solid #ece8e0;padding-top:16px;font-size:12px;line-height:1.5;color:#8a8578;">
-                  ${footer ? escapeBrandingHtml(footer) : `Sent by ${orgName}`}
+                  ${footerLines}
                 </div>
               </td>
             </tr>
@@ -371,6 +404,7 @@ export interface EventDto {
   timezone: string;
   allDay: boolean;
   maxCapacity: number | null;
+  waitlistEnabled: boolean;
   location: string | null;
   locationLat: number | null;
   locationLng: number | null;
@@ -533,6 +567,7 @@ export interface CreateEventRequest {
   timezone?: string;
   allDay?: boolean;
   maxCapacity?: number | null;
+  waitlistEnabled?: boolean;
   location?: string | null;
   locationLat?: number | null;
   locationLng?: number | null;
@@ -578,6 +613,16 @@ export interface PublicRegistrationRequest {
   name: string;
   email: string;
   phone?: string | null;
+  // When true, also subscribe this email to the org's Calendar (marketing
+  // opt-in). Captured by an unchecked-by-default checkbox on the booking form.
+  subscribeToCalendar?: boolean;
+}
+
+// Standalone Calendar opt-in from the org's public events page, for people who
+// aren't booking an event right now.
+export interface CalendarSubscribeRequest {
+  email: string;
+  name?: string | null;
 }
 
 export interface UpdateEventResourcesRequest {
@@ -633,4 +678,35 @@ export interface DashboardSummaryResponse {
   attendeeCount: number;
   registrationCount: number;
   upcomingEventCount: number;
+}
+
+// Org summary attached to events in the cross-org public feed.
+export interface PublicFeedOrg {
+  id: string;
+  name: string;
+  slug: string | null;
+  logo: string | null;
+  currency: string;
+}
+
+export interface PublicFeedEventItem {
+  event: EventDto;
+  org: PublicFeedOrg;
+}
+
+export interface PublicFeedResponse {
+  events: PublicFeedEventItem[];
+}
+
+// Event fetched by id without an org slug. customDomainOrigin is non-null when
+// the org serves its events on an active custom domain; the web layer redirects
+// there instead of rendering on the main domain.
+export interface PublicGlobalEventResponse {
+  event: EventDto;
+  org: PublicFeedOrg;
+  customDomainOrigin: string | null;
+}
+
+export interface ResolveDomainResponse {
+  slug: string | null;
 }

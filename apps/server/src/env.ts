@@ -30,7 +30,16 @@ const zoomSchema = z.object({
   ZOOM_WEBHOOK_SECRET_TOKEN: z.string().min(1).optional(),
 });
 
-const schema = z.intersection(z.intersection(stripeSchema, paymentSchema), zoomSchema);
+const cloudflareSchema = z.object({
+  CLOUDFLARE_API_TOKEN: z.string().min(1).optional(),
+  CLOUDFLARE_ZONE_ID: z.string().min(1).optional(),
+  CF_SAAS_CNAME_TARGET: z.string().min(1).optional(),
+});
+
+const schema = z.intersection(
+  z.intersection(stripeSchema, paymentSchema),
+  z.intersection(zoomSchema, cloudflareSchema),
+);
 
 function blank(v: string | undefined) {
   return v && v.length > 0 ? v : undefined;
@@ -45,6 +54,9 @@ const parsed = schema.safeParse({
   ZOOM_CLIENT_SECRET: blank(Bun.env.ZOOM_CLIENT_SECRET),
   ZOOM_REDIRECT_URI: blank(Bun.env.ZOOM_REDIRECT_URI),
   ZOOM_WEBHOOK_SECRET_TOKEN: blank(Bun.env.ZOOM_WEBHOOK_SECRET_TOKEN),
+  CLOUDFLARE_API_TOKEN: blank(Bun.env.CLOUDFLARE_API_TOKEN),
+  CLOUDFLARE_ZONE_ID: blank(Bun.env.CLOUDFLARE_ZONE_ID),
+  CF_SAAS_CNAME_TARGET: blank(Bun.env.CF_SAAS_CNAME_TARGET),
 });
 
 if (!parsed.success) {
@@ -61,6 +73,13 @@ export const stripeEnabled = Boolean(
 
 export const zoomEnabled = Boolean(
   env.ZOOM_CLIENT_ID && env.ZOOM_CLIENT_SECRET && env.ZOOM_REDIRECT_URI,
+);
+
+// Custom booking domains are provisioned through Cloudflare for SaaS. Without
+// these vars the feature runs in dev mode (rows are created active, no TLS
+// provisioning) outside production, and is unavailable in production.
+export const customDomainsEnabled = Boolean(
+  env.CLOUDFLARE_API_TOKEN && env.CLOUDFLARE_ZONE_ID && env.CF_SAAS_CNAME_TARGET,
 );
 
 export function requireZoomEnv() {
@@ -95,14 +114,6 @@ export const WEB_URL = Bun.env.WEB_URL ?? `http://localhost:${WEB_PORT}`;
 export const GOOGLE_MAPS_API_KEY = Bun.env.GOOGLE_MAPS_API_KEY ?? "";
 export const PUBLIC_SITE_URL = Bun.env.PUBLIC_SITE_URL ?? WEB_URL;
 export const BETTER_AUTH_URL = SERVER_URL;
-
-// Browser-facing origin for one org's public pages (slug subdomain on the web
-// host), e.g. "http://demo-org.lvh.me:5678". Used when building attendee links
-// outside a request context (payment webhooks, schedulers).
-export function orgWebOrigin(slug: string): string {
-  const base = new URL(WEB_URL);
-  return `${base.protocol}//${slug}.${base.host}`;
-}
 
 function parseUrl(u: string) {
   try {

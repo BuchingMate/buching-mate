@@ -23,8 +23,8 @@ describe("exceedsWeeklyCap", () => {
 });
 
 describe("isBillableAudience", () => {
-  test("should treat an all-attendee blast as billable", () => {
-    expect(isBillableAudience({ type: "all_attendees" })).toBe(true);
+  test("should treat a Calendar-subscriber send as billable", () => {
+    expect(isBillableAudience({ type: "calendar_subscribers" })).toBe(true);
   });
 
   test("should treat a send to an event's own guests as free", () => {

@@ -70,7 +70,7 @@ export function BroadcastComposer({ onCreated }: { onCreated?: () => void } = {}
   const orgName = orgQuery.data?.org.name ?? "Your organization";
 
   const [kind, setKind] = useState<BroadcastKind>("newsletter");
-  const [audienceChoice, setAudienceChoice] = useState<AudienceChoice>("all_attendees");
+  const [audienceChoice, setAudienceChoice] = useState<AudienceChoice>("calendar_subscribers");
   const [eventId, setEventId] = useState("");
   const [subject, setSubject] = useState("");
   const [bodyHtml, setBodyHtml] = useState("");
@@ -82,8 +82,8 @@ export function BroadcastComposer({ onCreated }: { onCreated?: () => void } = {}
   const orgSlug = orgQuery.data?.org.slug ?? "";
 
   const audience: BroadcastAudience | null =
-    audienceChoice === "all_attendees"
-      ? { type: "all_attendees" }
+    audienceChoice === "calendar_subscribers"
+      ? { type: "calendar_subscribers" }
       : eventId
         ? { type: "event_guests", eventId }
         : null;
@@ -101,8 +101,8 @@ export function BroadcastComposer({ onCreated }: { onCreated?: () => void } = {}
   );
 
   const audienceLabel =
-    audienceChoice === "all_attendees"
-      ? "All past attendees"
+    audienceChoice === "calendar_subscribers"
+      ? "Calendar subscribers"
       : (events.find((e) => e.id === eventId)?.title ?? "an event's guests");
 
   const createMutation = useMutation({
@@ -153,7 +153,7 @@ export function BroadcastComposer({ onCreated }: { onCreated?: () => void } = {}
                 value={audienceChoice}
                 onChange={setAudienceChoice}
                 options={[
-                  { value: "all_attendees", label: "All attendees" },
+                  { value: "calendar_subscribers", label: "Calendar subscribers" },
                   { value: "event_guests", label: "Event guests" },
                 ]}
               />

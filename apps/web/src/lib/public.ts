@@ -1,10 +1,14 @@
 import { createIsomorphicFn } from "@tanstack/react-start";
 import { getRequestHeader } from "@tanstack/react-start/server";
 import type {
+  CalendarSubscribeRequest,
   EventDto,
+  PublicFeedResponse,
+  PublicGlobalEventResponse,
   PublicOrgResponse,
   PublicRegistrationRequest,
   RegistrationDto,
+  ResolveDomainResponse,
 } from "@workspace/contracts";
 import { api } from "./api";
 
@@ -28,6 +32,24 @@ export function getPublicOrg(slug: string) {
   return api.get<PublicOrgResponse>(`/api/public/orgs/${encodeURIComponent(slug)}`);
 }
 
+// Cross-org feed shown at /events on the main domain.
+export function listGlobalPublicEvents() {
+  return api.get<PublicFeedResponse>("/api/public/events");
+}
+
+// Event by id without an org slug; includes the org context and (if the org
+// serves from its own domain) the origin to redirect to.
+export function getGlobalPublicEvent(eventId: string) {
+  return api.get<PublicGlobalEventResponse>(`/api/public/events/${encodeURIComponent(eventId)}`);
+}
+
+// Which org an arbitrary hostname (custom domain) belongs to.
+export function resolvePublicDomain(host: string) {
+  return api.get<ResolveDomainResponse>(
+    `/api/public/domains/resolve?host=${encodeURIComponent(host)}`,
+  );
+}
+
 export function listPublicEvents(slug: string) {
   return api.get<{ events: EventDto[] }>(`/api/public/orgs/${encodeURIComponent(slug)}/events`);
 }
@@ -41,6 +63,13 @@ export function getPublicEvent(slug: string, eventId: string) {
 export function publicRegister(slug: string, eventId: string, input: PublicRegistrationRequest) {
   return api.post<{ registration: RegistrationDto }>(
     `/api/public/orgs/${encodeURIComponent(slug)}/events/${encodeURIComponent(eventId)}/register`,
+    input,
+  );
+}
+
+export function subscribeToOrgCalendar(slug: string, input: CalendarSubscribeRequest) {
+  return api.post<{ subscribed: true }>(
+    `/api/public/orgs/${encodeURIComponent(slug)}/calendar/subscribe`,
     input,
   );
 }
@@ -115,26 +144,6 @@ export function getPublicSiteHostname() {
   return getPublicSiteUrl().hostname;
 }
 
-export function getOrgPublicOrigin(orgSlug: string) {
-  const siteUrl = getPublicSiteUrl();
-  return `${siteUrl.protocol}//${orgSlug}.${siteUrl.host}`;
-}
-
-export function getOrgPublicUrl(orgSlug: string, path = "/events") {
-  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
-  return `${getOrgPublicOrigin(orgSlug)}${normalizedPath}`;
-}
-
-export function extractPublicSlug(hostname: string): string | null {
-  const publicHostname = getPublicSiteHostname();
-  const suffix = `.${publicHostname}`;
-  if (!hostname.endsWith(suffix)) return null;
-
-  const label = hostname.slice(0, -suffix.length);
-  if (label && !label.includes(".")) return label;
-  return null;
-}
-
 export function getPublicHostname(): string | null {
   if (import.meta.env.SSR) return null;
   if (typeof window === "undefined") return null;
@@ -147,34 +156,42 @@ export function getPublicOrigin(): string {
   return window.location.origin;
 }
 
-export function getPublicSlug(): string | null {
-  const hostname = getPublicHostname();
-  return hostname ? extractPublicSlug(hostname) : null;
+// Canonical share link for an event: the main-domain detail page. Orgs with an
+// active custom domain get redirected there by the detail route, so this link
+// is always valid to share.
+export function getPublicEventUrl(eventId: string) {
+  return `${getPublicSiteOrigin()}/events/${encodeURIComponent(eventId)}`;
 }
 
-export function getPublicSlugFromWindow(): string | null {
-  return getPublicSlug();
+// The main domain is the configured public site plus plain localhost during
+// dev. Anything else reaching the app is a candidate customer domain.
+export function isMainDomainHostname(hostname: string | null): boolean {
+  if (!hostname) return true;
+  return (
+    hostname === getPublicSiteHostname() || hostname === "localhost" || hostname === "127.0.0.1"
+  );
 }
 
-export function isPublicSubdomain(hostname: string | null): boolean {
-  if (!hostname) return false;
-  return extractPublicSlug(hostname) !== null;
+export interface PublicRequestInfo {
+  origin: string;
+  hostname: string | null;
+  isMainDomain: boolean;
 }
 
-export function getPublicRequestInfo() {
+export function getPublicRequestInfo(): PublicRequestInfo {
   const serverInfo = readServerRequestInfo();
   if (serverInfo) {
     const host = cleanHostWithPort(serverInfo.forwardedHost ?? serverInfo.host);
     const hostname = cleanHost(host);
     const fallback = getPublicSiteOrigin();
 
-    if (!host || !hostname) return { origin: fallback, hostname: null, slug: null };
+    if (!host || !hostname) return { origin: fallback, hostname: null, isMainDomain: true };
 
     const proto = serverInfo.forwardedProto ?? (isLocalHost(host) ? "http" : "https");
     return {
       origin: `${proto}://${host}`,
       hostname,
-      slug: extractPublicSlug(hostname),
+      isMainDomain: isMainDomainHostname(hostname),
     };
   }
 
@@ -182,7 +199,7 @@ export function getPublicRequestInfo() {
   return {
     origin: getPublicOrigin(),
     hostname,
-    slug: hostname ? extractPublicSlug(hostname) : null,
+    isMainDomain: isMainDomainHostname(hostname),
   };
 }
 

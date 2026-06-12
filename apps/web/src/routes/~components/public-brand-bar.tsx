@@ -9,6 +9,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { getPublicSiteOrigin } from "@/lib/public";
 import { attendeeSessionQueryOptions } from "@/queries/auth";
 
 const ALL_CATEGORIES = "__all__";
@@ -43,9 +44,7 @@ export function PublicBrandBar({
               className="h-10 w-10 rounded-md object-cover ring-1 ring-white/30"
             />
           ) : null}
-          <div className="font-heading text-lg font-semibold uppercase tracking-[-0.01em]">
-            {orgName}
-          </div>
+          <div className="font-heading text-lg font-semibold tracking-tight">{orgName}</div>
         </Link>
         <div className="flex items-center gap-4">
           {contactEmail ? (
@@ -108,7 +107,7 @@ function PublicSearchRow({ search, setSearch, category, setCategory, categories 
 
         <button
           type="button"
-          className="rounded-md bg-primary px-8 text-base font-semibold uppercase tracking-wide text-primary-foreground transition-colors hover:bg-primary/90"
+          className="rounded-md bg-primary px-8 text-base font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
         >
           Search
         </button>
@@ -124,27 +123,29 @@ function AttendeeAuthSlot() {
     return <span className="text-sm text-primary-foreground/60">…</span>;
   }
 
+  // Attendee auth lives on the main domain only, so these are absolute links —
+  // this bar also renders on customer domains.
   if (session) {
     return (
-      <Link
-        to="/me"
+      <a
+        href={`${getPublicSiteOrigin()}/me`}
         className="inline-flex items-center gap-1.5 rounded-md border border-white/30 px-3 py-1.5 text-sm font-medium text-primary-foreground hover:bg-white/10"
       >
         <UserRound className="size-4" />
         <span className="hidden max-w-[160px] truncate sm:inline">{session.user.email}</span>
         <span className="sm:hidden">Account</span>
-      </Link>
+      </a>
     );
   }
 
   return (
-    <Link
-      to="/login"
-      className="inline-flex items-center gap-1.5 rounded-md bg-white/10 px-3 py-1.5 text-sm font-semibold uppercase tracking-wide text-primary-foreground hover:bg-white/20"
+    <a
+      href={`${getPublicSiteOrigin()}/login?as=attendee`}
+      className="inline-flex items-center gap-1.5 rounded-md bg-white/10 px-3 py-1.5 text-sm font-semibold text-primary-foreground hover:bg-white/20"
     >
       <UserRound className="size-4" />
       Sign in
-    </Link>
+    </a>
   );
 }
 

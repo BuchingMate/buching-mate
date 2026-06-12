@@ -93,10 +93,11 @@ Database schema lives in `apps/server/src/db/schema.ts`. After modifying:
 - **Server**: http://localhost:3456
 - **Database**: localhost:5433 (mapped from container's 5432)
 
-## Local Subdomain Testing
+## Local Domain Testing
 
-- Use `lvh.me` for local org-subdomain testing because wildcard subdomains resolve to `127.0.0.1`.
-- Example: `http://demo-org-zt1fbr.lvh.me:5678/events`.
+- The main public site is `http://lvh.me:5678` (`VITE_PUBLIC_SITE_URL`): global `/events` feed, attendee `/me`, admin, login.
+- Org subdomains no longer exist. Orgs publish into the shared feed unless they have an active custom domain.
+- To simulate a customer custom domain locally: add a domain like `customer.lvh.me` in org settings → Custom domain. Without Cloudflare env vars it activates immediately, then `http://customer.lvh.me:5678/events` serves that org's events (any `*.lvh.me` host resolves to `127.0.0.1`).
 - Do not rely on `traefik.me` for local development; public DNS can fail before the app receives the request.
 
 ## Conventions

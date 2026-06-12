@@ -6,8 +6,9 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ApiError } from "@/lib/api";
-import { getPublicOrigin, getPublicRequestInfo, startPublicCheckout } from "@/lib/public";
-import { NoSubdomainPlaceholder } from "./~components/no-subdomain";
+import { getPublicOrigin, startPublicCheckout } from "@/lib/public";
+import { globalPublicEventQueryOptions, resolvePublicContext } from "@/queries/public";
+import { UnknownDomain } from "./~components/unknown-domain";
 
 const searchSchema = z.object({
   status: z.enum(["success", "cancel"]).optional(),
@@ -17,9 +18,18 @@ const searchSchema = z.object({
 export const Route = createFileRoute("/events/$eventId/return")({
   validateSearch: searchSchema,
   component: PublicEventReturn,
-  loader: async ({ params }) => {
-    const { origin: baseUrl, slug } = await getPublicRequestInfo();
-    return { slug, baseUrl, eventId: params.eventId };
+  loader: async ({ context, params }) => {
+    const ctx = await resolvePublicContext(context.queryClient);
+    let slug: string | null = null;
+    if (ctx.mode === "org") {
+      slug = ctx.slug;
+    } else if (ctx.mode === "global") {
+      const global = await context.queryClient
+        .ensureQueryData(globalPublicEventQueryOptions(params.eventId))
+        .catch(() => null);
+      slug = global?.org.slug ?? null;
+    }
+    return { slug, baseUrl: ctx.origin, eventId: params.eventId };
   },
   head: ({ loaderData }) => {
     return makeAppHead({
@@ -37,7 +47,7 @@ function PublicEventReturn() {
   const { eventId } = Route.useParams();
   const search = Route.useSearch();
 
-  if (!slug) return <NoSubdomainPlaceholder />;
+  if (!slug) return <UnknownDomain />;
 
   return (
     <div className="min-h-svh bg-background">

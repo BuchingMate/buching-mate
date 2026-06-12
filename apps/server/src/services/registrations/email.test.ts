@@ -12,7 +12,7 @@ const input = {
   startUtc: new Date("2026-06-06T05:00:00.000Z"), // 3:00 PM AEST
   endUtc: new Date("2026-06-06T06:00:00.000Z"),
   description: null,
-  manageUrl: "http://acme.lvh.me:5678/me",
+  manageUrl: "http://lvh.me:5678/me",
 };
 
 describe("renderConfirmationEmail", () => {
@@ -29,7 +29,7 @@ describe("renderConfirmationEmail", () => {
     expect(html).toContain("https://outlook.live.com/calendar/0/action/compose");
     expect(html).toContain("https://www.google.com/maps/search/");
     expect(html).toContain(input.manageUrl);
-    expect(text).toContain("Manage your booking: http://acme.lvh.me:5678/me");
+    expect(text).toContain("Manage your booking: http://lvh.me:5678/me");
   });
 
   test("escapes user-provided values and keeps reference in the footer", () => {
@@ -66,6 +66,41 @@ describe("renderConfirmationEmail", () => {
     expect(html).toContain("About this event");
     expect(html).toContain("Bring a mat.<br/>Doors open 15 min early.");
     expect(text).toContain("About this event: Bring a mat.");
+  });
+
+  test("shows the amount paid and receipt note when the booking was paid", () => {
+    const { html, text } = renderConfirmationEmail({
+      ...input,
+      amountPaid: { amount: 2550, currency: "USD" },
+    });
+    expect(html).toContain("Amount paid");
+    expect(html).toContain("$25.50");
+    expect(html).toContain("This email is your receipt.");
+    expect(text).toContain("Amount paid: $25.50 (this email is your receipt)");
+  });
+
+  test("free bookings show no amount row", () => {
+    const { html } = renderConfirmationEmail(input);
+    expect(html).not.toContain("Amount paid");
+  });
+
+  test("shows the Calendar subscribe link only when a subscribeUrl is given", () => {
+    const withLink = renderConfirmationEmail({
+      ...input,
+      subscribeUrl: "http://localhost:3456/api/public/calendar/subscribe?token=tok",
+    });
+    expect(withLink.html).toContain("Subscribe to their Calendar");
+    expect(withLink.html).toContain("token=tok");
+    expect(withLink.text).toContain("Subscribe to Acme Inc's Calendar");
+
+    const withoutLink = renderConfirmationEmail(input);
+    expect(withoutLink.html).not.toContain("Subscribe to their Calendar");
+  });
+
+  test("footer carries the via-platform signature", () => {
+    const { html, text } = renderConfirmationEmail(input);
+    expect(html).toContain("Sent by Acme Inc via BuchingMate");
+    expect(text).toContain("Sent by Acme Inc via BuchingMate");
   });
 
   test("preheader summarises date, time, and place", () => {

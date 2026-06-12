@@ -25,6 +25,9 @@ export interface OutgoingEmail {
   // Provider-side metadata (e.g. Resend tags for webhook attribution).
   // Transports that have no tag concept ignore them.
   tags?: { name: string; value: string }[];
+  // Extra MIME headers, e.g. List-Unsubscribe / List-Unsubscribe-Post for
+  // one-click unsubscribe on marketing mail.
+  headers?: Record<string, string>;
 }
 
 export interface BatchSendResult {
@@ -69,6 +72,7 @@ function toResendPayload(email: OutgoingEmail) {
     ...(email.text ? { text: email.text } : {}),
     attachments: email.attachments,
     tags: email.tags,
+    ...(email.headers ? { headers: email.headers } : {}),
   };
 }
 
@@ -128,6 +132,7 @@ class MailpitTransport implements EmailTransport {
         Subject: email.subject,
         HTML: email.html,
         ...(email.text ? { Text: email.text } : {}),
+        ...(email.headers ? { Headers: email.headers } : {}),
         Attachments: email.attachments?.map((a) => ({
           Content: a.content,
           Filename: a.filename,

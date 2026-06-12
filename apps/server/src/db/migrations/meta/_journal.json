@@ -141,6 +141,48 @@
       "when": 1780174055751,
       "tag": "0019_backfill_email_verified",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1780842646905,
+      "tag": "0020_brave_speed_demon",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1780903088907,
+      "tag": "0021_careful_eternals",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1780906973491,
+      "tag": "0022_wild_wrecker",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1780906986342,
+      "tag": "0023_furry_mac_gargan",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1780909145381,
+      "tag": "0024_lovely_prism",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1781215824513,
+      "tag": "0025_early_bulldozer",
+      "breakpoints": true
     }
   ]
 }

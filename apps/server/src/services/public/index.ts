@@ -1,14 +1,22 @@
-import type { EventDto, PublicRegistrationRequest, RegistrationDto } from "@workspace/contracts";
-import { and, desc, eq } from "drizzle-orm";
+import type {
+  EventDto,
+  PublicFeedEventItem,
+  PublicGlobalEventResponse,
+  PublicRegistrationRequest,
+  RegistrationDto,
+} from "@workspace/contracts";
+import { and, asc, desc, eq, inArray, isNull, notExists, sql } from "drizzle-orm";
 import { db } from "../../db";
 import {
   attendees,
   events as eventsTable,
   organization,
+  orgCustomDomains,
   orgSettings,
   registrations,
 } from "../../db/schema";
-import { getEvent, listEvents } from "../events";
+import { getEvent, listEvents, toEventDto } from "../events";
+import { customDomainOriginForOrg, publicOriginForOrg } from "../domains";
 import { eventStartUtc, eventEndUtc } from "../../lib/event-time";
 import { rewritePublicAssetUrl } from "../assets/public-url";
 import { createRegistration, toRegistrationDto } from "../registrations";
@@ -20,6 +28,15 @@ import {
   getJoinUrlForRegistration,
 } from "../video";
 import { createResumeToken } from "../payments/resume-token";
+import { subscribeToCalendar } from "../calendar";
+import { createCalendarToken } from "../../lib/calendar-token";
+import { PUBLIC_SITE_URL, SERVER_URL } from "../../env";
+
+// "Subscribe to this org's Calendar" one-click link for the confirmation email.
+function calendarSubscribeUrl(orgId: string, email: string): string {
+  const token = createCalendarToken({ orgId, email });
+  return `${SERVER_URL}/api/public/calendar/subscribe?token=${encodeURIComponent(token)}`;
+}
 
 export async function getPublicOrg(slug: string) {
   const rows = await db.select().from(organization).where(eq(organization.slug, slug)).limit(1);
@@ -77,15 +94,119 @@ export async function getPublicEvent(slug: string, eventId: string) {
   return stripPrivate(event);
 }
 
+// Orgs with an active custom domain serve their events there exclusively, so
+// they are left out of the main-domain feed.
+function orgHasActiveCustomDomain() {
+  return notExists(
+    db
+      .select({ one: sql`1` })
+      .from(orgCustomDomains)
+      .where(
+        and(eq(orgCustomDomains.orgId, eventsTable.orgId), eq(orgCustomDomains.status, "active")),
+      ),
+  );
+}
+
+// All public events across orgs for the main-domain feed: published, upcoming,
+// not archived, and not owned by an org that serves from its own domain.
+export async function listAllPublicEvents(): Promise<PublicFeedEventItem[]> {
+  const rows = await db
+    .select({ event: eventsTable, org: organization, settings: orgSettings })
+    .from(eventsTable)
+    .innerJoin(organization, eq(eventsTable.orgId, organization.id))
+    .leftJoin(orgSettings, eq(orgSettings.orgId, organization.id))
+    .where(
+      and(
+        eq(eventsTable.visibility, "published"),
+        eq(eventsTable.status, "upcoming"),
+        isNull(eventsTable.archivedAt),
+        orgHasActiveCustomDomain(),
+      ),
+    )
+    .orderBy(asc(eventsTable.date), asc(eventsTable.time));
+
+  const eventIds = rows.map((row) => row.event.id);
+  let counts: Array<{ eventId: string; status: string; count: number }> = [];
+  if (eventIds.length > 0) {
+    counts = await db
+      .select({
+        eventId: registrations.eventId,
+        status: registrations.status,
+        count: sql<number>`count(*)::int`,
+      })
+      .from(registrations)
+      .where(inArray(registrations.eventId, eventIds))
+      .groupBy(registrations.eventId, registrations.status);
+  }
+  const countMap = new Map<string, { confirmed: number; waitlisted: number }>();
+  for (const row of rows) countMap.set(row.event.id, { confirmed: 0, waitlisted: 0 });
+  for (const c of counts) {
+    const existing = countMap.get(c.eventId);
+    if (!existing) continue;
+    if (c.status === "confirmed" || c.status === "pending") existing.confirmed += c.count;
+    if (c.status === "waitlisted") existing.waitlisted = c.count;
+  }
+
+  return rows.map((row) => {
+    const c = countMap.get(row.event.id) ?? { confirmed: 0, waitlisted: 0 };
+    return {
+      event: stripPrivate(toEventDto(row.event, c.confirmed, c.waitlisted)),
+      org: {
+        id: row.org.id,
+        name: row.org.name,
+        slug: row.org.slug,
+        logo: rewritePublicAssetUrl(row.org.logo),
+        currency: row.settings?.currency ?? "USD",
+      },
+    };
+  });
+}
+
+// Look up a public event by id alone (no slug). Returns the org context the
+// web layer needs to keep using the slug-scoped booking endpoints, plus the
+// org's custom-domain origin so old main-domain links can redirect there.
+export async function getGlobalPublicEvent(
+  eventId: string,
+): Promise<PublicGlobalEventResponse | null> {
+  const rows = await db
+    .select({ event: eventsTable, org: organization, settings: orgSettings })
+    .from(eventsTable)
+    .innerJoin(organization, eq(eventsTable.orgId, organization.id))
+    .leftJoin(orgSettings, eq(orgSettings.orgId, organization.id))
+    .where(eq(eventsTable.id, eventId))
+    .limit(1);
+  const row = rows[0];
+  if (!row) return null;
+
+  const event = await getEvent(row.org.id, eventId);
+  if (!event || !isPublicEvent(event)) return null;
+
+  return {
+    event: stripPrivate(event),
+    org: {
+      id: row.org.id,
+      name: row.org.name,
+      slug: row.org.slug,
+      logo: rewritePublicAssetUrl(row.org.logo),
+      currency: row.settings?.currency ?? "USD",
+    },
+    customDomainOrigin: await customDomainOriginForOrg(row.org.id),
+  };
+}
+
 export async function registerForPublicEvent(
   slug: string,
   eventId: string,
   input: PublicRegistrationRequest,
-  publicOrigin: string,
   attendeeUserId?: string | null,
 ) {
   const publicOrg = await getPublicOrg(slug);
   if (!publicOrg) return "org_not_found";
+
+  // Event links go to wherever the org's public pages live (custom domain or
+  // the main site); manage links always go to the main site, the only place
+  // attendee sessions exist.
+  const publicOrigin = await publicOriginForOrg(publicOrg.org.id);
 
   const event = await getPublicEvent(slug, eventId);
   if (!event) return "event_not_found";
@@ -117,6 +238,17 @@ export async function registerForPublicEvent(
   });
 
   if (typeof outcome === "string") return outcome;
+
+  // Calendar opt-in captured by the booking-form checkbox. Recorded for both
+  // paid and free bookings, regardless of payment outcome.
+  if (input.subscribeToCalendar) {
+    await subscribeToCalendar({
+      orgId: publicOrg.org.id,
+      email,
+      attendeeId: attendeeRows[0].id,
+      source: "registration",
+    });
+  }
 
   const isPaid = event.price > 0;
   if (isPaid) {
@@ -162,7 +294,11 @@ export async function registerForPublicEvent(
       endUtc,
       eventId: event.id,
       description: event.description ?? null,
-      manageUrl: `${publicOrigin}/me`,
+      manageUrl: `${PUBLIC_SITE_URL}/me`,
+      // Offer the Calendar opt-in only to those who didn't already tick the box.
+      subscribeUrl: input.subscribeToCalendar
+        ? null
+        : calendarSubscribeUrl(publicOrg.org.id, email),
     });
   }
 

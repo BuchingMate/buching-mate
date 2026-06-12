@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Check, ChevronDown, MapPin, Pencil, ShieldCheck, Users } from "lucide-react";
+import { Check, ChevronDown, ListPlus, MapPin, Pencil, ShieldCheck, Users } from "lucide-react";
 import type { MemberDto, ResourceDto } from "@workspace/contracts";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -270,6 +270,19 @@ export function EventCreateForm(props: Props) {
                   onChange={(v) => setField("maxCapacity", v)}
                 />
               </OptionRow>
+              {/* Waitlist only makes sense with a capacity limit. */}
+              {values.maxCapacity !== "" && (
+                <div className="flex items-center justify-between gap-3 p-3">
+                  <span className="flex items-center gap-2.5 text-sm">
+                    <ListPlus className="size-4 text-muted-foreground" /> Waitlist when full
+                  </span>
+                  <Switch
+                    checked={values.waitlistEnabled === "true"}
+                    disabled={disabled}
+                    onCheckedChange={(c) => setField("waitlistEnabled", c ? "true" : "false")}
+                  />
+                </div>
+              )}
               <div className="p-3">
                 <div className="flex items-center justify-between gap-3">
                   <span className="flex items-center gap-2.5 text-sm">

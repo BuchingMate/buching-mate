@@ -20,6 +20,12 @@ import {
   removeEmailDomain,
   verifyEmailDomain,
 } from "../services/email/domains";
+import {
+  createCustomDomain,
+  getCustomDomain,
+  removeCustomDomain,
+  verifyCustomDomain,
+} from "../services/domains";
 
 // A custom sending domain must be a plain hostname like "mail.acme.com".
 const DOMAIN_PATTERN = /^(?=.{1,253}$)([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}$/i;
@@ -177,5 +183,37 @@ export const orgRoutes = new Hono<ApiEnv>()
   })
   .delete("/email-domain", requireRole("admin"), async (c) => {
     await removeEmailDomain(c.var.orgId);
+    return c.json({ deleted: true });
+  })
+  .get("/custom-domain", requireRole("admin"), async (c) =>
+    c.json({ domain: await getCustomDomain(c.var.orgId) }),
+  )
+  .post("/custom-domain", requireRole("admin"), async (c) => {
+    if (c.var.org.plan === "free") {
+      return apiError(c, 402, "team_plan_required", "Custom domain requires the Team plan");
+    }
+    const domain = parseDomain(await readJson(c));
+    if (!domain)
+      return apiError(c, 400, "invalid_domain", "Enter a valid domain like events.acme.com");
+    try {
+      return c.json({ domain: await createCustomDomain(c.var.orgId, domain) });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "";
+      if (message === "invalid_hostname")
+        return apiError(c, 400, "invalid_domain", "That hostname can't be used");
+      if (message === "hostname_taken")
+        return apiError(c, 409, "hostname_taken", "That domain is already in use");
+      if (message === "custom_domains_unavailable")
+        return apiError(c, 503, "custom_domains_unavailable", "Custom domains are not available");
+      throw err;
+    }
+  })
+  .post("/custom-domain/verify", requireRole("admin"), async (c) => {
+    const domain = await verifyCustomDomain(c.var.orgId);
+    if (!domain) return apiError(c, 404, "domain_not_found", "No custom domain set");
+    return c.json({ domain });
+  })
+  .delete("/custom-domain", requireRole("admin"), async (c) => {
+    await removeCustomDomain(c.var.orgId);
     return c.json({ deleted: true });
   });

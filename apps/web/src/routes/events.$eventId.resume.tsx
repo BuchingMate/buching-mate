@@ -5,8 +5,9 @@ import { makeAppHead } from "@/lib/seo";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { ApiError } from "@/lib/api";
-import { getPublicRequestInfo, resumePublicCheckout } from "@/lib/public";
-import { NoSubdomainPlaceholder } from "./~components/no-subdomain";
+import { resumePublicCheckout } from "@/lib/public";
+import { globalPublicEventQueryOptions, resolvePublicContext } from "@/queries/public";
+import { UnknownDomain } from "./~components/unknown-domain";
 
 const searchSchema = z.object({
   token: z.string().optional(),
@@ -15,9 +16,20 @@ const searchSchema = z.object({
 export const Route = createFileRoute("/events/$eventId/resume")({
   validateSearch: searchSchema,
   component: PublicEventResume,
-  loader: async ({ params }) => {
-    const { origin: baseUrl, slug } = await getPublicRequestInfo();
-    return { slug, baseUrl, eventId: params.eventId };
+  loader: async ({ context, params }) => {
+    const ctx = await resolvePublicContext(context.queryClient);
+    let slug: string | null = null;
+    if (ctx.mode === "org") {
+      slug = ctx.slug;
+    } else if (ctx.mode === "global") {
+      // Resume links can arrive on the main domain even for orgs that have
+      // since moved to a custom domain; resolve the slug and finish in place.
+      const global = await context.queryClient
+        .ensureQueryData(globalPublicEventQueryOptions(params.eventId))
+        .catch(() => null);
+      slug = global?.org.slug ?? null;
+    }
+    return { slug, baseUrl: ctx.origin, eventId: params.eventId };
   },
   head: ({ loaderData }) => {
     return makeAppHead({
@@ -37,7 +49,7 @@ function PublicEventResume() {
   const { eventId } = Route.useParams();
   const { token } = Route.useSearch();
 
-  if (!slug) return <NoSubdomainPlaceholder />;
+  if (!slug) return <UnknownDomain />;
 
   return (
     <div className="min-h-svh bg-background">

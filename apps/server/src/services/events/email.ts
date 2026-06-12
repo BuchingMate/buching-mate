@@ -1,23 +1,19 @@
 import { sendTenantEmail } from "../email/mailer";
+import {
+  emailButton,
+  escapeHtml,
+  loadTenantBrand,
+  renderEmailShell,
+  renderEmailText,
+  type EmailBrand,
+} from "../email/shell";
 
-function escapeHtml(value: string) {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
+function heading(text: string) {
+  return `<h1 style="margin:0 0 12px 0;font-size:22px;font-weight:600;color:#0f172a;">${text}</h1>`;
 }
 
-function shell(body: string) {
-  return `<!DOCTYPE html><html><body style="margin:0;padding:0;background:#f6f7f9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:#0f172a;">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="padding:32px 16px;"><tr><td align="center">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:480px;background:#ffffff;border-radius:12px;border:1px solid #e2e8f0;overflow:hidden;"><tr><td style="padding:32px;">
-${body}
-</td></tr></table></td></tr></table></body></html>`.trim();
-}
-
-function button(href: string, label: string) {
-  return `<a href="${href}" style="display:inline-block;background:#2563eb;color:#ffffff;text-decoration:none;padding:11px 20px;border-radius:8px;font-size:14px;font-weight:500;">${escapeHtml(label)}</a>`;
+function paragraph(html: string) {
+  return `<p style="margin:0 0 16px 0;font-size:15px;line-height:1.55;color:#475569;">${html}</p>`;
 }
 
 export async function sendEventReviewRequestedEmail(input: {
@@ -28,15 +24,28 @@ export async function sendEventReviewRequestedEmail(input: {
   eventTitle: string;
   eventUrl: string;
 }) {
-  const body = `<h1 style="margin:0 0 12px 0;font-size:22px;font-weight:600;">Review requested</h1>
-<p style="margin:0 0 16px 0;font-size:15px;line-height:1.55;color:#475569;">Hi ${escapeHtml(input.reviewerName)}, ${escapeHtml(input.submitterName)} asked you to review the event “${escapeHtml(input.eventTitle)}” before it can be published.</p>
-<div style="margin:20px 0 0 0;">${button(input.eventUrl, "Review event")}</div>`;
+  const brand = await loadTenantBrand(input.orgId);
+  const body = `${heading("Review requested")}
+${paragraph(`Hi ${escapeHtml(input.reviewerName)}, ${escapeHtml(input.submitterName)} asked you to review the event “${escapeHtml(input.eventTitle)}” before it can be published.`)}
+<div style="margin:20px 0 24px 0;">${emailButton(input.eventUrl, "Review event", "#2563eb")}</div>`;
   await sendTenantEmail({
     orgId: input.orgId,
     kind: "review-requested",
     to: input.to,
     subject: `Review requested: ${input.eventTitle}`,
-    html: shell(body),
+    html: renderEmailShell({
+      brand,
+      preheader: `${input.submitterName} asked you to review “${input.eventTitle}”.`,
+      bodyHtml: body,
+    }),
+    text: renderEmailText(
+      [
+        `Hi ${input.reviewerName}, ${input.submitterName} asked you to review the event "${input.eventTitle}" before it can be published.`,
+        "",
+        `Review event: ${input.eventUrl}`,
+      ],
+      brand,
+    ),
   });
 }
 
@@ -47,15 +56,28 @@ export async function sendEventReviewApprovedEmail(input: {
   eventTitle: string;
   eventUrl: string;
 }) {
-  const body = `<h1 style="margin:0 0 12px 0;font-size:22px;font-weight:600;">Event approved</h1>
-<p style="margin:0 0 16px 0;font-size:15px;line-height:1.55;color:#475569;">${escapeHtml(input.reviewerName)} approved “${escapeHtml(input.eventTitle)}”. You can now publish it.</p>
-<div style="margin:20px 0 0 0;">${button(input.eventUrl, "Open event")}</div>`;
+  const brand = await loadTenantBrand(input.orgId);
+  const body = `${heading("Event approved")}
+${paragraph(`${escapeHtml(input.reviewerName)} approved “${escapeHtml(input.eventTitle)}”. You can now publish it.`)}
+<div style="margin:20px 0 24px 0;">${emailButton(input.eventUrl, "Open event", "#2563eb")}</div>`;
   await sendTenantEmail({
     orgId: input.orgId,
     kind: "review-approved",
     to: input.to,
     subject: `Approved: ${input.eventTitle}`,
-    html: shell(body),
+    html: renderEmailShell({
+      brand,
+      preheader: `“${input.eventTitle}” was approved — you can publish it now.`,
+      bodyHtml: body,
+    }),
+    text: renderEmailText(
+      [
+        `${input.reviewerName} approved "${input.eventTitle}". You can now publish it.`,
+        "",
+        `Open event: ${input.eventUrl}`,
+      ],
+      brand,
+    ),
   });
 }
 
@@ -67,14 +89,33 @@ export function renderEventCancelledEmail(input: {
   eventTitle: string;
   orgName: string;
   refundExpected: boolean;
-}): { subject: string; html: string } {
+  brand?: EmailBrand | null;
+}): { subject: string; html: string; text: string } {
+  const brand = input.brand ?? { name: input.orgName, logoUrl: null, accentColor: null };
   const refundRow = input.refundExpected
-    ? `<p style="margin:0 0 16px 0;font-size:15px;line-height:1.55;color:#475569;">Your payment will be refunded to your original payment method.</p>`
+    ? paragraph("Your payment will be refunded to your original payment method.")
     : "";
-  const body = `<h1 style="margin:0 0 12px 0;font-size:22px;font-weight:600;">Event cancelled</h1>
-<p style="margin:0 0 16px 0;font-size:15px;line-height:1.55;color:#475569;">Hi ${escapeHtml(input.attendeeName)}, ${escapeHtml(input.orgName)} has cancelled “${escapeHtml(input.eventTitle)}”. Your registration is no longer active.</p>
+  const body = `${heading("Event cancelled")}
+${paragraph(`Hi ${escapeHtml(input.attendeeName)}, ${escapeHtml(input.orgName)} has cancelled “${escapeHtml(input.eventTitle)}”. Your registration is no longer active.`)}
 ${refundRow}`;
-  return { subject: `Event cancelled: ${input.eventTitle}`, html: shell(body) };
+  const html = renderEmailShell({
+    brand,
+    preheader: `“${input.eventTitle}” was cancelled${input.refundExpected ? " — your payment will be refunded" : ""}.`,
+    bodyHtml: body,
+    footerHtml: `<p style="margin:0;font-size:12px;color:#94a3b8;">Questions? Just reply to this email.</p>`,
+  });
+  const text = renderEmailText(
+    [
+      `Hi ${input.attendeeName}, ${input.orgName} has cancelled "${input.eventTitle}". Your registration is no longer active.`,
+      input.refundExpected
+        ? "Your payment will be refunded to your original payment method."
+        : false,
+      "",
+      "Questions? Just reply to this email.",
+    ],
+    brand,
+  );
+  return { subject: `Event cancelled: ${input.eventTitle}`, html, text };
 }
 
 export async function sendEventCancelledEmail(input: {
@@ -85,13 +126,15 @@ export async function sendEventCancelledEmail(input: {
   orgName: string;
   refundExpected: boolean;
 }) {
-  const { subject, html } = renderEventCancelledEmail(input);
+  const brand = await loadTenantBrand(input.orgId);
+  const { subject, html, text } = renderEventCancelledEmail({ ...input, brand });
   await sendTenantEmail({
     orgId: input.orgId,
     kind: "event-cancelled",
     to: input.to,
     subject,
     html,
+    text,
   });
 }
 
@@ -103,18 +146,32 @@ export async function sendEventReviewRejectedEmail(input: {
   note: string | null;
   eventUrl: string;
 }) {
+  const brand = await loadTenantBrand(input.orgId);
   const noteRow = input.note
     ? `<p style="margin:0 0 16px 0;font-size:14px;color:#475569;border-left:3px solid #e2e8f0;padding-left:12px;">${escapeHtml(input.note)}</p>`
     : "";
-  const body = `<h1 style="margin:0 0 12px 0;font-size:22px;font-weight:600;">Changes requested</h1>
-<p style="margin:0 0 16px 0;font-size:15px;line-height:1.55;color:#475569;">${escapeHtml(input.reviewerName)} requested changes on “${escapeHtml(input.eventTitle)}” before it can be published.</p>
+  const body = `${heading("Changes requested")}
+${paragraph(`${escapeHtml(input.reviewerName)} requested changes on “${escapeHtml(input.eventTitle)}” before it can be published.`)}
 ${noteRow}
-<div style="margin:20px 0 0 0;">${button(input.eventUrl, "Edit event")}</div>`;
+<div style="margin:20px 0 24px 0;">${emailButton(input.eventUrl, "Edit event", "#2563eb")}</div>`;
   await sendTenantEmail({
     orgId: input.orgId,
     kind: "review-rejected",
     to: input.to,
     subject: `Changes requested: ${input.eventTitle}`,
-    html: shell(body),
+    html: renderEmailShell({
+      brand,
+      preheader: `${input.reviewerName} requested changes on “${input.eventTitle}”.`,
+      bodyHtml: body,
+    }),
+    text: renderEmailText(
+      [
+        `${input.reviewerName} requested changes on "${input.eventTitle}" before it can be published.`,
+        input.note ? `Note: ${input.note}` : false,
+        "",
+        `Edit event: ${input.eventUrl}`,
+      ],
+      brand,
+    ),
   });
 }

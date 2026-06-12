@@ -101,7 +101,7 @@ function HistoryTab({ onCompose }: { onCompose: () => void }) {
   });
 
   function audienceLabel(broadcast: BroadcastDto): string {
-    if (broadcast.audience.type === "all_attendees") return "All attendees";
+    if (broadcast.audience.type === "calendar_subscribers") return "Calendar subscribers";
     return eventTitles.get(broadcast.audience.eventId) ?? "Event guests";
   }
 

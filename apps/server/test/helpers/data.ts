@@ -20,6 +20,7 @@ export interface SeedEventOpts {
   title?: string;
   price?: number;
   maxCapacity?: number | null;
+  waitlistEnabled?: boolean;
   status?: EventStatus;
   visibility?: EventVisibility;
   date?: string;
@@ -40,6 +41,7 @@ export async function seedEvent(orgId: string, opts: SeedEventOpts = {}) {
       duration: opts.duration ?? 60,
       price: opts.price ?? 0,
       maxCapacity: opts.maxCapacity ?? null,
+      waitlistEnabled: opts.waitlistEnabled ?? false,
       status: opts.status ?? "upcoming",
       visibility: opts.visibility ?? "unpublished",
       tags: opts.tags ?? [],

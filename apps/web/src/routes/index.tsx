@@ -1,10 +1,10 @@
 import { createFileRoute, redirect } from "@tanstack/react-router";
-import { getPublicRequestInfo } from "@/lib/public";
 
 export const Route = createFileRoute("/")({
   ssr: false,
-  beforeLoad: async () => {
-    const { slug } = await getPublicRequestInfo();
-    throw redirect({ to: slug ? "/me" : "/admin" });
+  beforeLoad: () => {
+    // Main domain root → global events feed; a custom domain root → that org's
+    // events (same route, resolved by hostname).
+    throw redirect({ to: "/events" });
   },
 });

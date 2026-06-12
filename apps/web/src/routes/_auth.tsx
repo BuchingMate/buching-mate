@@ -5,8 +5,9 @@ import { sessionQueryOptions } from "@/queries/auth";
 export const Route = createFileRoute("/_auth")({
   ssr: "data-only",
   beforeLoad: async ({ context }) => {
-    const { slug } = await getPublicRequestInfo();
-    if (slug) {
+    // Staff admin lives on the main domain only; custom domains are public-only.
+    const { isMainDomain } = await getPublicRequestInfo();
+    if (!isMainDomain) {
       throw redirect({ href: `${getPublicSiteOrigin()}/login` });
     }
     const session = await context.queryClient.ensureQueryData(sessionQueryOptions);

@@ -1,20 +1,25 @@
-import { and, eq, isNotNull, ne, or, type SQL } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, ne, or, type SQL } from "drizzle-orm";
 import { isPaymentProvider } from "@workspace/contracts";
 import { db } from "../../db";
 import {
   attendees,
   events as eventsTable,
   organization,
+  orgSettings,
   paymentRefunds,
   registrations,
   webhookEvents,
 } from "../../db/schema";
 import { getLogger } from "../../observability/request-context";
 import { eventStartUtc, eventEndUtc } from "../../lib/event-time";
-import { orgWebOrigin } from "../../env";
+import type { Money } from "../../lib/money";
+import { PUBLIC_SITE_URL, SERVER_URL } from "../../env";
+import { createCalendarToken } from "../../lib/calendar-token";
+import { isSubscribed } from "../calendar";
 import { getAdapter, isAdapterAvailable } from "../../payments/registry";
 import { InvalidSignatureError, type NormalizedPaymentEvent } from "../../payments/adapter";
 import { sendBookingConfirmationEmail } from "../registrations/email";
+import { sendRefundConfirmationEmail } from "./email";
 import { addZoomRegistrant, cancelZoomRegistrant, getEventVideo } from "../video";
 
 export type WebhookOutcome =
@@ -40,6 +45,18 @@ type ConfirmationEmail = {
   eventId?: string;
   description?: string | null;
   manageUrl?: string | null;
+  amountPaid?: Money | null;
+  subscribeUrl?: string | null;
+};
+
+type RefundEmail = {
+  orgId: string;
+  to: string;
+  attendeeName: string;
+  eventTitle: string;
+  orgName: string;
+  amount: Money | null;
+  registrationId: string;
 };
 
 export async function handleWebhook(input: {
@@ -90,6 +107,7 @@ export async function handleWebhook(input: {
       type: "ok" as const,
       confirmation: applied.confirmation,
       cancelledRegistrations: applied.cancelledRegistrations,
+      refundEmails: applied.refundEmails,
     };
   });
 
@@ -97,6 +115,10 @@ export async function handleWebhook(input: {
 
   if (result.confirmation) {
     await sendBookingConfirmationEmail(result.confirmation);
+  }
+
+  for (const refund of result.refundEmails) {
+    await sendRefundConfirmationEmail(refund);
   }
 
   for (const { orgId, registrationId } of result.cancelledRegistrations) {
@@ -115,6 +137,7 @@ type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 type AppliedEvent = {
   confirmation: ConfirmationEmail | null;
   cancelledRegistrations: Array<{ orgId: string; registrationId: string }>;
+  refundEmails: RefundEmail[];
 };
 
 async function applyEvent(
@@ -125,25 +148,29 @@ async function applyEvent(
   switch (event.type) {
     case "payment.completed": {
       const confirmation = await markPaid(tx, event);
-      return { confirmation, cancelledRegistrations: [] };
+      return { confirmation, cancelledRegistrations: [], refundEmails: [] };
     }
     case "payment.expired": {
       const cancelled = await markStatus(tx, event, {
         paymentStatus: "expired",
         status: "cancelled",
       });
-      return { confirmation: null, cancelledRegistrations: cancelled };
+      return { confirmation: null, cancelledRegistrations: cancelled, refundEmails: [] };
     }
     case "payment.failed": {
       const cancelled = await markStatus(tx, event, {
         paymentStatus: "failed",
         status: "cancelled",
       });
-      return { confirmation: null, cancelledRegistrations: cancelled };
+      return { confirmation: null, cancelledRegistrations: cancelled, refundEmails: [] };
     }
     case "payment.refunded": {
-      const cancelled = await applyRefund(tx, provider, event);
-      return { confirmation: null, cancelledRegistrations: cancelled };
+      const applied = await applyRefund(tx, provider, event);
+      return {
+        confirmation: null,
+        cancelledRegistrations: applied.cancelledRegistrations,
+        refundEmails: applied.refundEmails,
+      };
     }
   }
 }
@@ -177,7 +204,6 @@ async function markPaid(
       attendeeName: attendees.name,
       eventTitle: eventsTable.title,
       orgName: organization.name,
-      orgSlug: organization.slug,
       eventDate: eventsTable.date,
       eventTime: eventsTable.time,
       location: eventsTable.location,
@@ -188,11 +214,14 @@ async function markPaid(
       endTime: eventsTable.endTime,
       timezone: eventsTable.timezone,
       description: eventsTable.description,
+      price: eventsTable.price,
+      orgCurrency: orgSettings.currency,
     })
     .from(registrations)
     .innerJoin(attendees, eq(registrations.attendeeId, attendees.id))
     .innerJoin(eventsTable, eq(registrations.eventId, eventsTable.id))
     .innerJoin(organization, eq(registrations.orgId, organization.id))
+    .leftJoin(orgSettings, eq(orgSettings.orgId, registrations.orgId))
     .where(eq(registrations.id, registration.id))
     .limit(1);
 
@@ -219,16 +248,26 @@ async function markPaid(
     endTime: _et,
     eventDate: _date,
     eventTime: _time,
-    orgSlug,
+    price,
+    orgCurrency,
     ...emailFields
   } = details;
+  // Offer the Calendar opt-in in the receipt only if they're not already subscribed.
+  const alreadySubscribed = await isSubscribed(details.orgId, details.to);
+  const subscribeUrl = alreadySubscribed
+    ? null
+    : `${SERVER_URL}/api/public/calendar/subscribe?token=${encodeURIComponent(
+        createCalendarToken({ orgId: details.orgId, email: details.to }),
+      )}`;
   return {
     ...emailFields,
     registrationId: registration.id,
     joinUrl,
     startUtc,
     endUtc,
-    manageUrl: orgSlug ? `${orgWebOrigin(orgSlug)}/me` : null,
+    manageUrl: `${PUBLIC_SITE_URL}/me`,
+    amountPaid: price > 0 ? { amount: price, currency: orgCurrency ?? "USD" } : null,
+    subscribeUrl,
   };
 }
 
@@ -254,7 +293,10 @@ async function applyRefund(
   tx: Tx,
   provider: string,
   event: Extract<NormalizedPaymentEvent, { type: "payment.refunded" }>,
-): Promise<Array<{ orgId: string; registrationId: string }>> {
+): Promise<{
+  cancelledRegistrations: Array<{ orgId: string; registrationId: string }>;
+  refundEmails: RefundEmail[];
+}> {
   const existing = await tx
     .select()
     .from(paymentRefunds)
@@ -284,7 +326,7 @@ async function applyRefund(
     const where = matchRegistration(event);
     if (!where) {
       logMatchMiss(event);
-      return [];
+      return { cancelledRegistrations: [], refundEmails: [] };
     }
     const regRows = await tx
       .select({ id: registrations.id })
@@ -294,7 +336,7 @@ async function applyRefund(
     const reg = regRows[0];
     if (!reg) {
       logMatchMiss(event);
-      return [];
+      return { cancelledRegistrations: [], refundEmails: [] };
     }
 
     await tx.insert(paymentRefunds).values({
@@ -312,15 +354,48 @@ async function applyRefund(
 
   if (status === "succeeded") {
     const where = matchRegistration(event);
-    if (!where) return [];
+    if (!where) return { cancelledRegistrations: [], refundEmails: [] };
     const rows = await tx
       .update(registrations)
       .set({ paymentStatus: "refunded", updatedAt: new Date() })
       .where(where)
       .returning({ id: registrations.id, orgId: registrations.orgId });
-    return rows.map((row) => ({ orgId: row.orgId, registrationId: row.id }));
+    const refundEmails = await loadRefundEmails(
+      tx,
+      rows.map((row) => row.id),
+      event.amount ?? null,
+    );
+    return {
+      cancelledRegistrations: rows.map((row) => ({ orgId: row.orgId, registrationId: row.id })),
+      refundEmails,
+    };
   }
-  return [];
+  return { cancelledRegistrations: [], refundEmails: [] };
+}
+
+// Collect what the attendee-facing refund confirmation needs for each
+// refunded registration.
+async function loadRefundEmails(
+  tx: Tx,
+  registrationIds: string[],
+  amount: Money | null,
+): Promise<RefundEmail[]> {
+  if (registrationIds.length === 0) return [];
+  const rows = await tx
+    .select({
+      registrationId: registrations.id,
+      orgId: registrations.orgId,
+      to: attendees.email,
+      attendeeName: attendees.name,
+      eventTitle: eventsTable.title,
+      orgName: organization.name,
+    })
+    .from(registrations)
+    .innerJoin(attendees, eq(registrations.attendeeId, attendees.id))
+    .innerJoin(eventsTable, eq(registrations.eventId, eventsTable.id))
+    .innerJoin(organization, eq(registrations.orgId, organization.id))
+    .where(inArray(registrations.id, registrationIds));
+  return rows.map((row) => ({ ...row, amount }));
 }
 
 function matchRegistration(event: NormalizedPaymentEvent): SQL | null {

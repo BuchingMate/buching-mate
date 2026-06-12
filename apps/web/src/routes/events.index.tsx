@@ -1,49 +1,140 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useSuspenseQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
-import { CalendarDays } from "lucide-react";
+import { CalendarDays, Search } from "lucide-react";
 import type { EventDto } from "@workspace/contracts";
 import { makeAppHead } from "@/lib/seo";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { DEFAULT_CURRENCY, formatPrice, getPublicRequestInfo } from "@/lib/public";
-import { publicEventsQueryOptions, publicOrgQueryOptions } from "@/queries/public";
-import { NoSubdomainPlaceholder } from "./~components/no-subdomain";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { DEFAULT_CURRENCY, formatPrice } from "@/lib/public";
+import {
+  publicEventsQueryOptions,
+  publicFeedQueryOptions,
+  publicOrgQueryOptions,
+  resolvePublicContext,
+} from "@/queries/public";
+import { CalendarSubscribe } from "./~components/calendar-subscribe";
+import { DateGroupedEventList, formatTime, type EventListEntry } from "./~components/event-list";
 import { PUBLIC_ALL_CATEGORIES, PublicBrandBar } from "./~components/public-brand-bar";
+import { PlatformBrandBar } from "./~components/platform-brand-bar";
+import { UnknownDomain } from "./~components/unknown-domain";
 
 export const Route = createFileRoute("/events/")({
-  component: PublicOrgEvents,
+  component: PublicEvents,
   loader: async ({ context }) => {
-    const { origin: baseUrl, slug } = await getPublicRequestInfo();
-    if (!slug) return { slug: null as string | null, baseUrl };
-    const [orgData, eventsData] = await Promise.all([
-      context.queryClient.ensureQueryData(publicOrgQueryOptions(slug)),
-      context.queryClient.ensureQueryData(publicEventsQueryOptions(slug)),
-    ]);
-    return { slug, baseUrl, orgData, eventsData };
+    const ctx = await resolvePublicContext(context.queryClient);
+    if (ctx.mode === "org") {
+      const [orgData, eventsData] = await Promise.all([
+        context.queryClient.ensureQueryData(publicOrgQueryOptions(ctx.slug)),
+        context.queryClient.ensureQueryData(publicEventsQueryOptions(ctx.slug)),
+      ]);
+      return { mode: ctx.mode, slug: ctx.slug, baseUrl: ctx.origin, orgData, eventsData };
+    }
+    if (ctx.mode === "global") {
+      await context.queryClient.ensureQueryData(publicFeedQueryOptions);
+      return { mode: ctx.mode, slug: null, baseUrl: ctx.origin };
+    }
+    return { mode: ctx.mode, slug: null, baseUrl: ctx.origin };
   },
   head: ({ loaderData }) => {
-    const orgName = loaderData?.orgData?.org.name;
-    const title = orgName ? `${orgName} Events` : "Events";
+    const orgName =
+      loaderData && "orgData" in loaderData ? loaderData.orgData?.org.name : undefined;
+    const title = orgName ? `${orgName} Events` : "Discover events";
     const description = orgName
       ? `Browse upcoming events from ${orgName}.`
-      : "Browse upcoming events.";
+      : "Browse and book upcoming events.";
 
     return makeAppHead({
       title,
       description,
       baseUrl: loaderData?.baseUrl,
       path: "/events",
-      noIndex: !loaderData?.slug,
+      noIndex: loaderData?.mode === "unknown",
     });
   },
 });
 
 const ALL_CATEGORIES = PUBLIC_ALL_CATEGORIES;
 
-function PublicOrgEvents() {
-  const { slug } = Route.useLoaderData();
-  if (!slug) return <NoSubdomainPlaceholder />;
-  return <PublicOrgEventsContent slug={slug} />;
+function PublicEvents() {
+  const loaderData = Route.useLoaderData();
+  if (loaderData.mode === "unknown") return <UnknownDomain />;
+  if (loaderData.mode === "org" && loaderData.slug) {
+    return <PublicOrgEventsContent slug={loaderData.slug} />;
+  }
+  return <GlobalEventsFeed />;
+}
+
+function GlobalEventsFeed() {
+  const { data: feed } = useSuspenseQuery(publicFeedQueryOptions);
+
+  const [search, setSearch] = useState("");
+  const [category, setCategory] = useState<string>(ALL_CATEGORIES);
+
+  const entries = useMemo<EventListEntry[]>(
+    () =>
+      feed.events.map((item) => ({
+        event: item.event,
+        currency: item.org.currency,
+        orgName: item.org.name,
+      })),
+    [feed.events],
+  );
+
+  const categories = useMemo(() => {
+    const set = new Set<string>();
+    for (const entry of entries) {
+      if (entry.event.category) set.add(entry.event.category);
+    }
+    return Array.from(set).sort();
+  }, [entries]);
+
+  const visibleEntries = useMemo(
+    () => filterEntries(entries, search, category),
+    [entries, search, category],
+  );
+
+  const filtered = search.trim().length > 0 || category !== ALL_CATEGORIES;
+
+  return (
+    <div className="min-h-svh bg-background">
+      <PlatformBrandBar />
+
+      <main className="mx-auto max-w-3xl px-6 pb-24 pt-8 sm:pt-12">
+        <header className="space-y-2">
+          <h1 className="font-heading text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">
+            Discover events
+          </h1>
+          <p className="text-base text-muted-foreground">
+            Workshops, classes, and sessions from every organizer, in one place.
+          </p>
+        </header>
+
+        <FilterRow
+          search={search}
+          setSearch={setSearch}
+          category={category}
+          setCategory={setCategory}
+          categories={categories}
+          count={visibleEntries.length}
+        />
+
+        {visibleEntries.length === 0 ? (
+          <FeedEmptyState filtered={filtered} />
+        ) : (
+          <div className="mt-8">
+            <DateGroupedEventList entries={visibleEntries} />
+          </div>
+        )}
+      </main>
+    </div>
+  );
 }
 
 function PublicOrgEventsContent({ slug }: { slug: string }) {
@@ -56,12 +147,15 @@ function PublicOrgEventsContent({ slug }: { slug: string }) {
   const currency = orgData.settings?.currency ?? DEFAULT_CURRENCY;
   const categories = orgData.settings?.categories ?? [];
 
+  const entries = useMemo<EventListEntry[]>(
+    () => eventsData.events.map((event) => ({ event, currency })),
+    [eventsData.events, currency],
+  );
+
   const sortedEvents = useMemo(() => {
-    return [...eventsData.events].sort((a, b) => {
-      const aKey = `${a.date}T${a.time}`;
-      const bKey = `${b.date}T${b.time}`;
-      return aKey.localeCompare(bKey);
-    });
+    return [...eventsData.events].sort((a, b) =>
+      `${a.date}T${a.time}`.localeCompare(`${b.date}T${b.time}`),
+    );
   }, [eventsData.events]);
 
   const hero = useMemo(() => {
@@ -69,16 +163,13 @@ function PublicOrgEventsContent({ slug }: { slug: string }) {
     return withImage ?? sortedEvents[0] ?? null;
   }, [sortedEvents]);
 
-  const visibleEvents = useMemo(() => {
-    const term = search.trim().toLowerCase();
-    return sortedEvents.filter((event) => {
-      if (hero && event.id === hero.id) return false;
-      if (category !== ALL_CATEGORIES && event.category !== category) return false;
-      if (!term) return true;
-      const haystack = `${event.title} ${event.description ?? ""}`.toLowerCase();
-      return haystack.includes(term);
-    });
-  }, [sortedEvents, hero, search, category]);
+  const visibleEntries = useMemo(
+    () =>
+      filterEntries(entries, search, category).filter(
+        (entry) => !hero || entry.event.id !== hero.id,
+      ),
+    [entries, search, category, hero],
+  );
 
   const filtered = search.trim().length > 0 || category !== ALL_CATEGORIES;
 
@@ -93,36 +184,103 @@ function PublicOrgEventsContent({ slug }: { slug: string }) {
 
       {hero ? <HeroEvent event={hero} currency={currency} /> : null}
 
-      <main className="mx-auto max-w-7xl px-6 py-12">
-        <div className="mb-6 flex items-end justify-between">
-          <h2 className="font-heading text-2xl font-semibold uppercase tracking-tight sm:text-3xl">
+      <main className="mx-auto max-w-3xl px-6 pb-24 pt-12">
+        <div className="mb-8 flex items-end justify-between gap-4">
+          <h2 className="font-heading text-2xl font-semibold tracking-tight sm:text-3xl">
             {hero ? "More events" : "Upcoming events"}
           </h2>
-          <span className="text-sm text-muted-foreground">
-            {visibleEvents.length} {visibleEvents.length === 1 ? "event" : "events"}
-          </span>
+          <div className="flex items-center gap-4">
+            <span className="text-sm text-muted-foreground">
+              {visibleEntries.length} {visibleEntries.length === 1 ? "event" : "events"}
+            </span>
+            <CalendarSubscribe slug={slug} orgName={orgData.org.name} />
+          </div>
         </div>
 
-        {visibleEvents.length === 0 ? (
-          <Alert>
-            <AlertDescription>
-              {filtered
-                ? "No events match your filters."
-                : hero
-                  ? "No other events scheduled. Check back soon."
-                  : "No events scheduled. Check back soon."}
-            </AlertDescription>
-          </Alert>
+        {visibleEntries.length === 0 ? (
+          <FeedEmptyState filtered={filtered} hasHero={Boolean(hero)} />
         ) : (
-          <div className="grid gap-x-6 gap-y-10 sm:grid-cols-2 lg:grid-cols-3">
-            {visibleEvents.map((event) => (
-              <PublicEventCard key={event.id} event={event} currency={currency} />
-            ))}
-          </div>
+          <DateGroupedEventList entries={visibleEntries} />
         )}
       </main>
     </div>
   );
+}
+
+function FilterRow({
+  search,
+  setSearch,
+  category,
+  setCategory,
+  categories,
+  count,
+}: {
+  search: string;
+  setSearch: (v: string) => void;
+  category: string;
+  setCategory: (v: string) => void;
+  categories: string[];
+  count: number;
+}) {
+  return (
+    <div className="mt-8 flex flex-wrap items-center gap-2">
+      <div className="relative min-w-0 flex-1 basis-56">
+        <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+        <Input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search events or organizers"
+          className="h-9 rounded-full pl-9"
+        />
+      </div>
+      {categories.length > 0 ? (
+        <Select value={category} onValueChange={(v) => setCategory(v ?? ALL_CATEGORIES)}>
+          <SelectTrigger className="h-9 w-44 rounded-full">
+            <SelectValue placeholder="All categories" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={ALL_CATEGORIES}>All categories</SelectItem>
+            {categories.map((c) => (
+              <SelectItem key={c} value={c}>
+                {c}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      ) : null}
+      <span className="ml-auto text-sm text-muted-foreground">
+        {count} {count === 1 ? "event" : "events"}
+      </span>
+    </div>
+  );
+}
+
+function FeedEmptyState({ filtered, hasHero }: { filtered: boolean; hasHero?: boolean }) {
+  return (
+    <div className="mt-8 rounded-xl border border-dashed border-border bg-muted/30 p-12 text-center">
+      <CalendarDays className="mx-auto size-8 text-muted-foreground/60" />
+      <h3 className="mt-3 text-lg font-semibold tracking-tight">
+        {filtered ? "No matching events" : "Nothing scheduled yet"}
+      </h3>
+      <p className="mx-auto mt-1 max-w-sm text-sm text-muted-foreground">
+        {filtered
+          ? "Try a different search or category."
+          : hasHero
+            ? "No other events on the calendar. Check back soon."
+            : "New events land here as organizers publish them. Check back soon."}
+      </p>
+    </div>
+  );
+}
+
+function filterEntries(entries: EventListEntry[], search: string, category: string) {
+  const term = search.trim().toLowerCase();
+  return entries.filter(({ event, orgName }) => {
+    if (category !== ALL_CATEGORIES && event.category !== category) return false;
+    if (!term) return true;
+    const haystack = `${event.title} ${event.description ?? ""} ${orgName ?? ""}`.toLowerCase();
+    return haystack.includes(term);
+  });
 }
 
 function HeroEvent({ event, currency }: { event: EventDto; currency: string }) {
@@ -148,11 +306,11 @@ function HeroEvent({ event, currency }: { event: EventDto; currency: string }) {
         <div className="relative flex h-full flex-col justify-end px-8 pb-12 sm:px-12 sm:pb-14">
           <div className="max-w-2xl text-white">
             {event.category ? (
-              <div className="mb-3 inline-block bg-primary px-3 py-1 text-2xs font-semibold uppercase tracking-wider text-primary-foreground">
+              <div className="mb-3 inline-flex h-6 items-center rounded-full bg-white/15 px-3 text-xs font-semibold text-white">
                 {event.category}
               </div>
             ) : null}
-            <h1 className="font-heading text-4xl font-semibold uppercase leading-[1.05] tracking-tight sm:text-6xl">
+            <h1 className="font-heading text-4xl font-semibold leading-[1.05] tracking-tight sm:text-5xl">
               {event.title}
             </h1>
             <p className="mt-4 text-base text-white/90 sm:text-lg">
@@ -162,7 +320,7 @@ function HeroEvent({ event, currency }: { event: EventDto; currency: string }) {
             <Link
               to="/events/$eventId"
               params={{ eventId: event.id }}
-              className="mt-6 inline-flex items-center rounded-md bg-primary px-6 py-3 text-sm font-semibold uppercase tracking-wide text-primary-foreground transition-colors hover:bg-primary/90"
+              className="mt-6 inline-flex items-center rounded-full bg-primary px-6 py-3 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
             >
               {priceLabel}
             </Link>
@@ -170,71 +328,6 @@ function HeroEvent({ event, currency }: { event: EventDto; currency: string }) {
         </div>
       </div>
     </section>
-  );
-}
-
-function PublicEventCard({ event, currency }: { event: EventDto; currency: string }) {
-  const remaining =
-    event.maxCapacity === null
-      ? null
-      : Math.max(0, event.maxCapacity - event.confirmedRegistrations);
-  const full = remaining !== null && remaining === 0;
-  const low = remaining !== null && remaining > 0 && remaining <= 5;
-  const dateLabel = formatDate(event.date);
-  const timeLabel = formatTime(event.time);
-  const priceLabel = event.price > 0 ? formatPrice(event.price, currency) : "Free";
-
-  const kicker = full
-    ? "Waitlist only"
-    : low
-      ? `Only ${remaining} left`
-      : (event.category ?? event.location);
-  const kickerUrgent = full || low;
-
-  return (
-    <Link
-      to="/events/$eventId"
-      params={{ eventId: event.id }}
-      className="group block focus:outline-none"
-    >
-      <div className="aspect-[16/10] overflow-hidden rounded-md bg-muted">
-        {event.imageUrl ? (
-          <img
-            src={event.imageUrl}
-            alt=""
-            className="h-full w-full object-cover transition-transform duration-500 ease-out group-hover:scale-[1.04]"
-          />
-        ) : (
-          <div className="flex h-full w-full items-center justify-center text-foreground/30">
-            <CalendarDays className="size-12" />
-          </div>
-        )}
-      </div>
-
-      <div className="mt-4 space-y-2">
-        {kicker ? (
-          <div
-            className={
-              kickerUrgent
-                ? "text-2xs font-semibold uppercase tracking-wider text-primary"
-                : "text-2xs font-semibold uppercase tracking-wider text-muted-foreground"
-            }
-          >
-            {kicker}
-          </div>
-        ) : null}
-        <h3 className="font-heading text-xl font-semibold uppercase leading-tight tracking-tight text-foreground transition-colors group-hover:text-primary line-clamp-2">
-          {event.title}
-        </h3>
-        <div className="text-sm font-semibold text-foreground">
-          {dateLabel} · {timeLabel}
-        </div>
-        {event.location && !kickerUrgent && kicker !== event.location ? (
-          <div className="text-sm text-muted-foreground">{event.location}</div>
-        ) : null}
-        <div className="pt-1 text-sm font-semibold text-primary">{priceLabel}</div>
-      </div>
-    </Link>
   );
 }
 
@@ -247,12 +340,4 @@ function formatDate(date: string) {
     day: "numeric",
     year: "numeric",
   });
-}
-
-function formatTime(time: string) {
-  const [h, m] = time.split(":").map((n) => Number.parseInt(n, 10));
-  if (Number.isNaN(h) || Number.isNaN(m)) return time;
-  const d = new Date();
-  d.setHours(h, m, 0, 0);
-  return d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
 }

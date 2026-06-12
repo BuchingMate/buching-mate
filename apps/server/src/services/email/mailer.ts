@@ -88,6 +88,7 @@ export type TenantEmailKind =
   | "booking-confirmed"
   | "event-cancelled"
   | "event-reminder"
+  | "payment-refunded"
   | "broadcast";
 
 export interface SendTenantEmailInput {
@@ -185,31 +186,39 @@ export interface BroadcastSendResult {
   failed: string[];
 }
 
-// Send the same email to many recipients for an org. Resolves the org sender
+// One recipient's copy of a broadcast. Each carries its own html and headers
+// because the unsubscribe link (and List-Unsubscribe header) is per-recipient.
+export interface BroadcastMessage {
+  to: string;
+  html: string;
+  headers?: Record<string, string>;
+}
+
+// Send a per-recipient batch of a broadcast for an org. Resolves the org sender
 // once, then hands the batch to the transport. Returns which addresses went
 // out and which failed, so the caller can record per-recipient status and
 // meter only real sends.
 export async function sendBroadcastEmails(input: {
   orgId: string;
-  recipients: string[];
   subject: string;
-  html: string;
+  messages: BroadcastMessage[];
 }): Promise<BroadcastSendResult> {
   if (await isSendingSuspended(input.orgId)) {
     getLogger().warn(
-      { orgId: input.orgId, count: input.recipients.length },
+      { orgId: input.orgId, count: input.messages.length },
       "broadcast blocked: sending suspended",
     );
-    return { sent: [], failed: [...input.recipients] };
+    return { sent: [], failed: input.messages.map((m) => m.to) };
   }
 
   const sender = await resolveSender(input.orgId);
-  const emails: OutgoingEmail[] = input.recipients.map((to) => ({
+  const emails: OutgoingEmail[] = input.messages.map((m) => ({
     from: sender.from,
-    to,
+    to: m.to,
     replyTo: sender.replyTo,
     subject: input.subject,
-    html: input.html,
+    html: m.html,
+    ...(m.headers ? { headers: m.headers } : {}),
     tags: [
       { name: "org_id", value: input.orgId },
       { name: "kind", value: "broadcast" },

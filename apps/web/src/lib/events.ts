@@ -16,6 +16,7 @@ const baseEventFormSchema = z.object({
   requireApproval: z.enum(["true", "false"]),
   allDay: z.enum(["true", "false"]),
   maxCapacity: z.string().regex(/^\d*$/, "Capacity must be a whole number"),
+  waitlistEnabled: z.enum(["true", "false"]),
   category: z.string(),
   tags: z.string(),
   status: z.enum(["upcoming", "completed", "cancelled"]),
@@ -61,6 +62,7 @@ export const emptyEventForm: EventFormState = {
   requireApproval: "false",
   allDay: "false",
   maxCapacity: "",
+  waitlistEnabled: "false",
   category: "",
   tags: "",
   status: "upcoming",
@@ -129,6 +131,7 @@ export function eventToForm(event: EventDto, currency: string): EventFormState {
     requireApproval: event.reviewerId ? "true" : "false",
     allDay: event.allDay ? "true" : "false",
     maxCapacity: event.maxCapacity === null ? "" : String(event.maxCapacity),
+    waitlistEnabled: event.waitlistEnabled ? "true" : "false",
     category: event.category ?? "",
     tags: event.tags.join(", "),
     status: event.status,
@@ -163,6 +166,7 @@ export function formToEventRequest(form: EventFormState, currency: string): Crea
     videoProvider: form.videoProvider === "zoom" ? "zoom" : null,
     allDay,
     maxCapacity: form.maxCapacity ? Number(form.maxCapacity) : null,
+    waitlistEnabled: form.waitlistEnabled === "true",
     category: form.category.trim() || null,
     tags: form.tags
       .split(",")

@@ -145,6 +145,11 @@ function parseEvent(
     }
   }
 
+  if (input.waitlistEnabled !== undefined) {
+    if (typeof input.waitlistEnabled !== "boolean") return "waitlistEnabled must be a boolean";
+    parsed.waitlistEnabled = input.waitlistEnabled;
+  }
+
   if (input.status !== undefined) {
     if (typeof input.status !== "string" || !isEventStatus(input.status))
       return "Event status is invalid";

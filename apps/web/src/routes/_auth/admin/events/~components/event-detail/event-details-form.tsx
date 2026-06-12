@@ -12,6 +12,7 @@ import { ScheduleFields } from "../schedule-fields";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PublicAssetUpload } from "@/components/public-asset-upload";
+import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { deletePublicAsset } from "@/lib/assets";
@@ -149,6 +150,19 @@ export function EventDetailsForm({
                   </div>
                 )}
               />
+
+              {/* Waitlist is opt-in and only meaningful with a capacity limit. */}
+              {values.maxCapacity !== "" && (
+                <div className="flex items-center justify-between gap-3 self-end pb-1.5">
+                  <Label htmlFor="waitlist-enabled">Waitlist when full</Label>
+                  <Switch
+                    id="waitlist-enabled"
+                    checked={values.waitlistEnabled === "true"}
+                    disabled={!canManage}
+                    onCheckedChange={(c) => setField("waitlistEnabled", c ? "true" : "false")}
+                  />
+                </div>
+              )}
 
               <div className="space-y-2 sm:col-span-2">
                 <Label>Location</Label>

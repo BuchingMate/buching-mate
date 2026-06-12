@@ -21,6 +21,7 @@ import { videoRoutes } from "./api/video";
 import { webhookRoutes } from "./api/webhooks";
 import { resendWebhookRoutes } from "./api/webhooks/resend";
 import { PUBLIC_HOST_SUFFIXES, WEB_URL } from "./env";
+import { ensureFreshDomainCache, lookupCustomDomainHost } from "./services/domains/cache";
 
 const webOrigin = WEB_URL;
 const allowlist = PUBLIC_HOST_SUFFIXES;
@@ -40,6 +41,8 @@ function resolveOrigin(origin: string) {
       return origin;
     }
   }
+  // Active customer domains book cross-origin against this API.
+  if (lookupCustomDomainHost(host)) return origin;
   return null;
 }
 
@@ -47,6 +50,18 @@ export function createApp() {
   const app = new Hono();
 
   app.use("*", observability);
+
+  // Keep the custom-domain host map warm so the (sync) CORS origin callback can
+  // consult it. No-op within the cache TTL. A failed refresh must not take down
+  // unrelated requests — stale (or empty) data only narrows CORS.
+  app.use("*", async (_c, next) => {
+    try {
+      await ensureFreshDomainCache();
+    } catch {
+      // served from the previous snapshot
+    }
+    await next();
+  });
 
   app.use(
     "*",

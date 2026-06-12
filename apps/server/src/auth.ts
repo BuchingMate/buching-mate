@@ -129,10 +129,12 @@ const organizationPlugin = organization({
           (org as { name: string }).name = cleanName;
         }
       }
+      // The slug is still the public API path key (/api/public/orgs/:slug) and
+      // is embedded in resume tokens, so changing it breaks shared links.
       if (!("slug" in org) || org.slug === undefined) return;
       const plan = await orgPlanFor(memberData.organizationId);
       if (plan === "free") {
-        throw new Error("Custom subdomain requires Team plan");
+        throw new Error("Changing your public URL slug requires the Team plan");
       }
     },
     beforeAcceptInvitation: async ({ user, invitation, organization: org }) => {

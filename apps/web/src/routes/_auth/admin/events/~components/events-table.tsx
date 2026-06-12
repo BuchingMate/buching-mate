@@ -27,7 +27,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { usePatchEvent } from "@/hooks/use-events";
-import { formatPrice, getOrgPublicUrl } from "@/lib/public";
+import { formatPrice, getPublicEventUrl } from "@/lib/public";
 import { useOrgCurrency } from "@/hooks/use-org";
 import { eventRegistrationsQueryOptions } from "@/queries/registrations";
 import { Badge } from "@/components/ui/badge";
@@ -58,7 +58,6 @@ function getArchivePatch(event: Pick<EventDto, "archivedAt">) {
 
 export function EventsTable({
   events,
-  orgSlug,
   sortKey,
   setSortKey,
   canManage,
@@ -66,7 +65,6 @@ export function EventsTable({
   onError,
 }: {
   events: EventDto[];
-  orgSlug: string | null;
   sortKey: SortKey;
   setSortKey: (key: SortKey) => void;
   canManage: boolean;
@@ -141,7 +139,6 @@ export function EventsTable({
               <EventRow
                 key={event.id}
                 event={event}
-                orgSlug={orgSlug}
                 canManage={canManage}
                 onDuplicate={onDuplicate}
                 onError={onError}
@@ -212,14 +209,12 @@ function SortableHead({
 
 function EventRow({
   event,
-  orgSlug,
   canManage,
   onDuplicate,
   onError,
   onRegistrationsClick,
 }: {
   event: EventDto;
-  orgSlug: string | null;
   canManage: boolean;
   onDuplicate: (eventId: string) => void;
   onError: (message: string) => void;
@@ -227,10 +222,7 @@ function EventRow({
 }) {
   const patchMutation = usePatchEvent(event.id);
   const currency = useOrgCurrency();
-  const publicEventUrl =
-    orgSlug && event.visibility === "published"
-      ? getOrgPublicUrl(orgSlug, `/events/${event.id}`)
-      : null;
+  const publicEventUrl = event.visibility === "published" ? getPublicEventUrl(event.id) : null;
   const updateEvent = (input: Partial<Pick<EventDto, "archivedAt" | "status" | "visibility">>) => {
     patchMutation.mutate(input, {
       onError: (error) =>

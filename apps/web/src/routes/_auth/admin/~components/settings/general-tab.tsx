@@ -15,11 +15,22 @@ import {
 } from "@/components/ui/select";
 import { clearOrgLogo } from "@/lib/assets";
 import { updateOrgSettings } from "@/lib/org";
-import { DEFAULT_CURRENCY, getOrgPublicUrl, listCurrencies } from "@/lib/public";
+import { DEFAULT_CURRENCY, getPublicSiteOrigin, listCurrencies } from "@/lib/public";
 import { currentOrgQueryOptions } from "@/queries/auth";
 import { orgKeys, orgSettingsQueryOptions } from "@/queries/org";
+import { orgCustomDomainQueryOptions } from "@/queries/org-custom-domain";
 
 const CURRENCIES = listCurrencies();
+
+// Custom domains are https in real deployments; mirror the dev scheme/port so
+// hosts like customer.lvh.me:5678 stay clickable locally.
+function customDomainOrigin(hostname: string): string {
+  const site = new URL(getPublicSiteOrigin());
+  if (site.protocol === "http:") {
+    return `http://${hostname}${site.port ? `:${site.port}` : ""}`;
+  }
+  return `https://${hostname}`;
+}
 
 export function GeneralTab({ orgSlug }: { orgSlug: string }) {
   const orgQuery = useQuery(currentOrgQueryOptions);
@@ -31,7 +42,12 @@ export function GeneralTab({ orgSlug }: { orgSlug: string }) {
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [copied, setCopied] = useState(false);
-  const publicBookingUrl = getOrgPublicUrl(orgSlug);
+  const customDomainQuery = useQuery(orgCustomDomainQueryOptions);
+  const customDomain = customDomainQuery.data?.domain;
+  const publicBookingUrl =
+    customDomain?.status === "active"
+      ? `${customDomainOrigin(customDomain.hostname)}/events`
+      : `${getPublicSiteOrigin()}/events`;
 
   useEffect(() => {
     if (!settingsQuery.data) return;

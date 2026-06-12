@@ -15,6 +15,7 @@ export type CreateRegistrationOutcome =
   | { type: "created" | "resume"; registration: RegistrationDto }
   | "event_not_found"
   | "event_not_bookable"
+  | "event_full"
   | "attendee_not_found"
   | "duplicate_registration";
 
@@ -101,6 +102,7 @@ export async function createRegistration(
     .select({
       id: events.id,
       maxCapacity: events.maxCapacity,
+      waitlistEnabled: events.waitlistEnabled,
       price: events.price,
       status: events.status,
     })
@@ -165,6 +167,9 @@ export async function createRegistration(
         ),
       );
     if (activeCount.length >= event.maxCapacity) {
+      // Waitlist is opt-in per event: a full event without it takes no
+      // further registrations.
+      if (!event.waitlistEnabled) return "event_full";
       status = "waitlisted";
     }
   }

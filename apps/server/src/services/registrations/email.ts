@@ -1,7 +1,16 @@
 import { buildEventIcs } from "../../lib/ics";
 import { googleCalendarUrl, outlookCalendarUrl } from "../../lib/calendar-links";
 import { formatEventDateTime } from "../../lib/event-time";
+import { formatDisplay, type Money } from "../../lib/money";
 import { sendTenantEmail } from "../email/mailer";
+import {
+  emailButton,
+  escapeHtml,
+  loadTenantBrand,
+  renderEmailShell,
+  renderEmailText,
+  type EmailBrand,
+} from "../email/shell";
 
 export async function sendBookingResumeEmail({
   orgId,
@@ -16,12 +25,15 @@ export async function sendBookingResumeEmail({
   orgName: string;
   resumeUrl: string;
 }) {
+  const brand = await loadTenantBrand(orgId);
+  const rendered = renderResumeEmail({ eventTitle, orgName, resumeUrl, brand });
   await sendTenantEmail({
     orgId,
     kind: "booking-resume",
     to,
     subject: `Complete your booking for ${eventTitle}`,
-    html: renderResumeHtml({ eventTitle, orgName, resumeUrl }),
+    html: rendered.html,
+    text: rendered.text,
   });
 }
 
@@ -41,6 +53,8 @@ export async function sendBookingConfirmationEmail({
   eventId,
   description,
   manageUrl,
+  amountPaid,
+  subscribeUrl,
 }: {
   orgId: string;
   to: string;
@@ -57,6 +71,8 @@ export async function sendBookingConfirmationEmail({
   eventId?: string;
   description?: string | null;
   manageUrl?: string | null;
+  amountPaid?: Money | null;
+  subscribeUrl?: string | null;
 }) {
   const icsAttachment = {
     filename: "event.ics",
@@ -77,6 +93,7 @@ export async function sendBookingConfirmationEmail({
     ).toString("base64"),
   };
 
+  const brand = await loadTenantBrand(orgId);
   const rendered = renderConfirmationEmail({
     attendeeName,
     eventTitle,
@@ -89,6 +106,9 @@ export async function sendBookingConfirmationEmail({
     endUtc,
     description: description ?? null,
     manageUrl: manageUrl ?? null,
+    amountPaid: amountPaid ?? null,
+    subscribeUrl: subscribeUrl ?? null,
+    brand,
   });
 
   await sendTenantEmail({
@@ -102,55 +122,46 @@ export async function sendBookingConfirmationEmail({
   });
 }
 
-function renderResumeHtml({
-  eventTitle,
-  orgName,
-  resumeUrl,
-}: {
+interface ResumeRenderInput {
   eventTitle: string;
   orgName: string;
   resumeUrl: string;
-}) {
-  return `
-<!DOCTYPE html>
-<html>
-  <body style="margin:0;padding:0;background:#f6f7f9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:#0f172a;">
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="padding:32px 16px;">
-      <tr>
-        <td align="center">
-          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:480px;background:#ffffff;border-radius:12px;border:1px solid #e2e8f0;overflow:hidden;">
-            <tr>
-              <td style="padding:32px 32px 8px 32px;">
+  brand?: EmailBrand | null;
+}
+
+// Exported for tests: pure render, no I/O.
+export function renderResumeEmail(input: ResumeRenderInput): { html: string; text: string } {
+  const brand = input.brand ?? { name: input.orgName, logoUrl: null, accentColor: null };
+  const body = `
                 <h1 style="margin:0 0 12px 0;font-size:22px;font-weight:600;color:#0f172a;">
                   Complete your booking
                 </h1>
                 <p style="margin:0 0 24px 0;font-size:15px;line-height:1.55;color:#475569;">
-                  Your spot for <strong>${escapeHtml(eventTitle)}</strong> at ${escapeHtml(orgName)} is held as pending. Finish payment within 30 minutes to confirm.
+                  Your spot for <strong>${escapeHtml(input.eventTitle)}</strong> at ${escapeHtml(input.orgName)} is held as pending. Finish payment within 30 minutes to confirm.
                 </p>
-                <a href="${resumeUrl}"
-                   style="display:inline-block;background:#0f172a;color:#ffffff;text-decoration:none;padding:11px 20px;border-radius:8px;font-size:14px;font-weight:500;">
-                  Complete payment
-                </a>
+                ${emailButton(input.resumeUrl, "Complete payment")}
                 <p style="margin:24px 0 0 0;font-size:12px;color:#94a3b8;line-height:1.5;">
                   Or paste this link into your browser:<br/>
-                  <span style="color:#475569;word-break:break-all;">${resumeUrl}</span>
-                </p>
-              </td>
-            </tr>
-            <tr>
-              <td style="padding:20px 32px;background:#f8fafc;border-top:1px solid #e2e8f0;">
-                <p style="margin:0;font-size:12px;color:#94a3b8;">
-                  If you didn't start this booking, you can ignore this email.
-                </p>
-              </td>
-            </tr>
-          </table>
-        </td>
-      </tr>
-    </table>
-  </body>
-</html>
-  `.trim();
+                  <span style="color:#475569;word-break:break-all;">${escapeHtml(input.resumeUrl)}</span>
+                </p>`;
+  const html = renderEmailShell({
+    brand,
+    preheader: `Finish payment within 30 minutes to confirm your spot for ${input.eventTitle}.`,
+    bodyHtml: body,
+    footerHtml: `<p style="margin:0;font-size:12px;color:#94a3b8;">If you didn't start this booking, you can ignore this email.</p>`,
+  });
+  const text = renderEmailText(
+    [
+      `Your spot for ${input.eventTitle} at ${input.orgName} is held as pending.`,
+      "Finish payment within 30 minutes to confirm:",
+      "",
+      input.resumeUrl,
+      "",
+      "If you didn't start this booking, you can ignore this email.",
+    ],
+    brand,
+  );
+  return { html, text };
 }
 
 interface ConfirmationRenderInput {
@@ -165,6 +176,9 @@ interface ConfirmationRenderInput {
   endUtc: Date;
   description: string | null;
   manageUrl: string | null;
+  amountPaid?: Money | null;
+  subscribeUrl?: string | null;
+  brand?: EmailBrand | null;
 }
 
 // Exported for tests: pure render, no I/O.
@@ -172,6 +186,7 @@ export function renderConfirmationEmail(input: ConfirmationRenderInput): {
   html: string;
   text: string;
 } {
+  const brand = input.brand ?? { name: input.orgName, logoUrl: null, accentColor: null };
   const { dateLabel, timeLabel } = formatEventDateTime(
     input.startUtc,
     input.endUtc,
@@ -187,7 +202,6 @@ export function renderConfirmationEmail(input: ConfirmationRenderInput): {
   };
   const googleUrl = googleCalendarUrl(calendarInput);
   const outlookUrl = outlookCalendarUrl(calendarInput);
-  // Shown by inbox list views next to the subject; invisible in the body.
   const preheader = [dateLabel, timeLabel, input.location ?? (input.joinUrl ? "Online" : null)]
     .filter(Boolean)
     .join(" · ");
@@ -195,8 +209,8 @@ export function renderConfirmationEmail(input: ConfirmationRenderInput): {
   const joinButton = input.joinUrl
     ? `
                 <div style="margin:0 0 20px 0;">
-                  <a href="${input.joinUrl}" style="display:inline-block;background:#2563eb;color:#ffffff;text-decoration:none;padding:11px 20px;border-radius:8px;font-size:14px;font-weight:500;">Join meeting</a>
-                  <p style="margin:8px 0 0 0;font-size:12px;color:#94a3b8;word-break:break-all;">${input.joinUrl}</p>
+                  ${emailButton(input.joinUrl, "Join meeting", "#2563eb")}
+                  <p style="margin:8px 0 0 0;font-size:12px;color:#94a3b8;word-break:break-all;">${escapeHtml(input.joinUrl)}</p>
                 </div>
       `
     : "";
@@ -207,11 +221,13 @@ export function renderConfirmationEmail(input: ConfirmationRenderInput): {
     : input.joinUrl
       ? "Online"
       : "To be announced";
+  const amountLabel = input.amountPaid ? formatDisplay(input.amountPaid) : null;
   const detailRows = [
     ["Date", escapeHtml(dateLabel)],
     ["Time", escapeHtml(timeLabel)],
     ["Location", locationCell],
     ["Host", escapeHtml(input.orgName)],
+    ...(amountLabel ? [["Amount paid", escapeHtml(amountLabel)]] : []),
   ]
     .map(
       ([label, value], i, all) => `
@@ -228,20 +244,20 @@ export function renderConfirmationEmail(input: ConfirmationRenderInput): {
       `
     : "";
   const manageLink = input.manageUrl
-    ? `<a href="${input.manageUrl}" style="color:#475569;text-decoration:underline;">Manage your booking</a> &middot; `
+    ? `<a href="${escapeHtml(input.manageUrl)}" style="color:#475569;text-decoration:underline;">Manage your booking</a> &middot; `
+    : "";
+  const receiptNote = amountLabel ? " This email is your receipt." : "";
+  // Calendar opt-in invite, shown only when the attendee hasn't already
+  // subscribed. One-click link; subscribing is the recipient's explicit choice.
+  const subscribeBlock = input.subscribeUrl
+    ? `
+                <p style="margin:0 0 24px 0;font-size:13px;color:#64748b;">
+                  Want to hear about ${escapeHtml(input.orgName)}'s future events?
+                  <a href="${escapeHtml(input.subscribeUrl)}" style="color:#2563eb;text-decoration:underline;">Subscribe to their Calendar</a>.
+                </p>`
     : "";
 
-  const html = `
-<!DOCTYPE html>
-<html>
-  <body style="margin:0;padding:0;background:#f6f7f9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:#0f172a;">
-    <div style="display:none;max-height:0;overflow:hidden;mso-hide:all;">${escapeHtml(preheader)}</div>
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="padding:32px 16px;">
-      <tr>
-        <td align="center">
-          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:480px;background:#ffffff;border-radius:12px;border:1px solid #e2e8f0;overflow:hidden;">
-            <tr>
-              <td style="padding:32px 32px 8px 32px;">
+  const body = `
                 <h1 style="margin:0 0 12px 0;font-size:22px;font-weight:600;color:#0f172a;">
                   You're booked
                 </h1>
@@ -259,50 +275,39 @@ export function renderConfirmationEmail(input: ConfirmationRenderInput): {
                   <a href="${escapeHtml(outlookUrl)}" style="color:#2563eb;text-decoration:underline;">Outlook</a> &middot;
                   or open the attached invite (Apple&nbsp;Calendar)
                 </p>
-              </td>
-            </tr>
-            <tr>
-              <td style="padding:20px 32px;background:#f8fafc;border-top:1px solid #e2e8f0;">
+                ${subscribeBlock}`;
+  const footer = `
                 <p style="margin:0 0 4px 0;font-size:12px;color:#94a3b8;">
                   ${manageLink}Questions? Just reply to this email.
                 </p>
                 <p style="margin:0;font-size:11px;color:#cbd5e1;">
-                  Booking reference: ${escapeHtml(input.registrationId)}
-                </p>
-              </td>
-            </tr>
-          </table>
-        </td>
-      </tr>
-    </table>
-  </body>
-</html>
-  `.trim();
+                  Booking reference: ${escapeHtml(input.registrationId)}.${receiptNote}
+                </p>`;
 
-  const textLines = [
-    `Hi ${input.attendeeName}, your spot for ${input.eventTitle} at ${input.orgName} is confirmed.`,
-    "",
-    `Date: ${dateLabel}`,
-    `Time: ${timeLabel}`,
-    `Location: ${input.location ?? (input.joinUrl ? "Online" : "To be announced")}`,
-    `Host: ${input.orgName}`,
-    ...(input.joinUrl ? [`Join: ${input.joinUrl}`] : []),
-    ...(input.description ? ["", `About this event: ${input.description}`] : []),
-    "",
-    `Add to Google Calendar: ${googleUrl}`,
-    ...(input.manageUrl ? [`Manage your booking: ${input.manageUrl}`] : []),
-    "",
-    `Booking reference: ${input.registrationId}`,
-  ];
+  const html = renderEmailShell({ brand, preheader, bodyHtml: body, footerHtml: footer });
 
-  return { html, text: textLines.join("\n") };
-}
+  const text = renderEmailText(
+    [
+      `Hi ${input.attendeeName}, your spot for ${input.eventTitle} at ${input.orgName} is confirmed.`,
+      "",
+      `Date: ${dateLabel}`,
+      `Time: ${timeLabel}`,
+      `Location: ${input.location ?? (input.joinUrl ? "Online" : "To be announced")}`,
+      `Host: ${input.orgName}`,
+      amountLabel ? `Amount paid: ${amountLabel} (this email is your receipt)` : false,
+      input.joinUrl ? `Join: ${input.joinUrl}` : false,
+      ...(input.description ? ["", `About this event: ${input.description}`] : []),
+      "",
+      `Add to Google Calendar: ${googleUrl}`,
+      input.manageUrl ? `Manage your booking: ${input.manageUrl}` : false,
+      input.subscribeUrl
+        ? `Subscribe to ${input.orgName}'s Calendar for future events: ${input.subscribeUrl}`
+        : false,
+      "",
+      `Booking reference: ${input.registrationId}`,
+    ],
+    brand,
+  );
 
-function escapeHtml(value: string) {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
+  return { html, text };
 }

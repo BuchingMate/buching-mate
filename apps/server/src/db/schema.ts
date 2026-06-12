@@ -205,6 +205,8 @@ export const events = pgTable(
     timezone: text("timezone").notNull().default("UTC"),
     allDay: boolean("all_day").notNull().default(false),
     maxCapacity: integer("max_capacity"),
+    // Opt-in: a full event only takes waitlist registrations when enabled.
+    waitlistEnabled: boolean("waitlist_enabled").notNull().default(false),
     location: text("location"),
     locationLat: doublePrecision("location_lat"),
     locationLng: doublePrecision("location_lng"),
@@ -586,6 +588,46 @@ export const orgEmailDomains = pgTable(
   (table) => [uniqueIndex("org_email_domains_org_idx").on(table.orgId)],
 );
 
+export const customDomainStatus = pgEnum("custom_domain_status", [
+  "pending",
+  "verifying",
+  "active",
+  "failed",
+  "disabled",
+]);
+
+// One custom booking domain per org (Team plan and up). The org points a CNAME
+// at our platform; Cloudflare for SaaS issues the certificate. While the domain
+// is active the org's public events serve only on that hostname and the org is
+// excluded from the main-domain events feed. "disabled" keeps the row but stops
+// it resolving (e.g. plan downgrade).
+export const orgCustomDomains = pgTable(
+  "org_custom_domains",
+  {
+    id: id(),
+    orgId: text("org_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    // Bare lowercase hostname, no scheme or port.
+    hostname: text("hostname").notNull(),
+    // Null when Cloudflare provisioning is disabled (local dev).
+    cloudflareHostnameId: text("cloudflare_hostname_id"),
+    status: customDomainStatus("status").notNull().default("pending"),
+    dnsRecords: jsonb("dns_records")
+      .$type<import("@workspace/contracts").EmailDnsRecord[]>()
+      .notNull()
+      .default([]),
+    lastCheckedAt: timestamp("last_checked_at"),
+    verifiedAt: timestamp("verified_at"),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (table) => [
+    uniqueIndex("org_custom_domains_org_idx").on(table.orgId),
+    uniqueIndex("org_custom_domains_hostname_idx").on(table.hostname),
+  ],
+);
+
 // A newsletter or invitation an org composes and sends to a list. This is the
 // only org-composed mail, and the only mail that counts toward the weekly send
 // quota. The audience selector records who it targets; recipients are expanded
@@ -632,6 +674,39 @@ export const broadcastRecipients = pgTable(
     updatedAt: updatedAt(),
   },
   (table) => [uniqueIndex("broadcast_recipients_unique_idx").on(table.broadcastId, table.email)],
+);
+
+// One row per (org, email) that has opted into — or back out of — an org's
+// Calendar (the org's marketing list). Subscription is per-org: each org is its
+// own sender/controller, so subscribing to one says nothing about another.
+// status "subscribed" is the only audience for marketing broadcasts; the
+// one-click unsubscribe link flips it to "unsubscribed" while keeping the row
+// for audit. Populated by the booking-form checkbox, the public org-page
+// button, and the confirmation-email subscribe link.
+export const calendarSubscriptionStatus = pgEnum("calendar_subscription_status", [
+  "subscribed",
+  "unsubscribed",
+]);
+
+export const calendarSubscriptions = pgTable(
+  "calendar_subscriptions",
+  {
+    id: id(),
+    orgId: text("org_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    email: text("email").notNull(),
+    attendeeId: text("attendee_id").references(() => attendees.id, { onDelete: "set null" }),
+    status: calendarSubscriptionStatus("status").notNull().default("subscribed"),
+    // Where the opt-in happened: "registration", "org_page", or "email_link".
+    source: text("source").notNull().default("registration"),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (table) => [
+    uniqueIndex("calendar_subscriptions_org_email_idx").on(table.orgId, table.email),
+    index("calendar_subscriptions_org_status_idx").on(table.orgId, table.status),
+  ],
 );
 
 export const videoConnections = pgTable(

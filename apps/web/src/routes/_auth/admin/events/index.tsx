@@ -452,7 +452,6 @@ function Events() {
         ) : view === "list" ? (
           <EventsTable
             events={paginatedEvents}
-            orgSlug={orgSlug}
             sortKey={sortKey}
             setSortKey={setSortKey}
             canManage={canManage}

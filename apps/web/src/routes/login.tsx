@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Separator } from "@/components/ui/separator";
-import { getPublicRequestInfo } from "@/lib/public";
+import { getPublicRequestInfo, getPublicSiteOrigin } from "@/lib/public";
 import { attendeeSessionQueryOptions, authKeys, sessionQueryOptions } from "@/queries/auth";
 import { pageHead } from "@/lib/seo";
 import { emailDomainHint, isEmailDomainAllowed } from "@/lib/email-domain";
@@ -19,13 +19,16 @@ import { ResendVerificationButton } from "@/components/resend-verification-butto
 export const Route = createFileRoute("/login")({
   component: Login,
   head: () => pageHead("Sign in"),
-  loader: async () => {
-    const { slug } = await getPublicRequestInfo();
-    return { isAttendee: slug !== null };
-  },
-  beforeLoad: async ({ context }) => {
-    const { slug } = await getPublicRequestInfo();
-    if (slug) {
+  // /login = staff sign-in; /login?as=attendee = attendee magic link. All auth
+  // lives on the main domain.
+  validateSearch: (search: Record<string, unknown>): { as?: "attendee" } =>
+    search.as === "attendee" ? { as: "attendee" } : {},
+  beforeLoad: async ({ context, search }) => {
+    const { isMainDomain } = await getPublicRequestInfo();
+    if (!isMainDomain) {
+      throw redirect({ href: `${getPublicSiteOrigin()}/login` });
+    }
+    if (search.as === "attendee") {
       const attendeeSession = await context.queryClient.ensureQueryData(
         attendeeSessionQueryOptions,
       );
@@ -42,8 +45,8 @@ export const Route = createFileRoute("/login")({
 });
 
 function Login() {
-  const { isAttendee } = Route.useLoaderData();
-  if (isAttendee) return <AttendeeLogin />;
+  const { as } = Route.useSearch();
+  if (as === "attendee") return <AttendeeLogin />;
   return <StaffLogin />;
 }
 
@@ -224,6 +227,12 @@ function StaffLogin() {
             Sign up
           </Link>
         </p>
+        <p className="text-center text-sm text-muted-foreground">
+          Looking for your event bookings?{" "}
+          <Link to="/login" search={{ as: "attendee" }} className="font-medium underline">
+            Attendee sign in
+          </Link>
+        </p>
       </div>
     </div>
   );
@@ -293,6 +302,10 @@ function AttendeeLogin() {
         <p className="text-center text-sm text-muted-foreground">
           <Link to="/events" className="font-medium underline">
             Back to events
+          </Link>
+          {" · "}
+          <Link to="/login" className="font-medium underline">
+            Organizer sign in
           </Link>
         </p>
       </div>
