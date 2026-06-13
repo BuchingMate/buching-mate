@@ -1,6 +1,6 @@
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
-import { magicLink } from "better-auth/plugins";
+import { captcha, magicLink } from "better-auth/plugins";
 import { db } from "../db";
 import { attendeeSession, attendeeUser, attendeeVerification } from "../db/auth-schema";
 import { BETTER_AUTH_URL, TRUSTED_ORIGINS } from "../env";
@@ -61,6 +61,19 @@ export function renderMagicLinkEmail(url: string): { html: string; text: string 
   return { html, text };
 }
 
+// Turnstile on the attendee magic-link request, mirroring the staff auth captcha.
+// The plugin reads the token from the x-captcha-response header; gated on the
+// secret so a fresh checkout boots without Turnstile configured.
+const turnstileSecret = process.env.TURNSTILE_SECRET_KEY;
+const captchaPlugin = turnstileSecret
+  ? captcha({
+      provider: "cloudflare-turnstile",
+      secretKey: turnstileSecret,
+      // Only the magic-link sign-in; overrides the plugin's email/password defaults.
+      endpoints: ["/sign-in/magic-link"],
+    })
+  : null;
+
 export const attendeeAuth = betterAuth({
   database: drizzleAdapter(db, {
     provider: "pg",
@@ -84,5 +97,6 @@ export const attendeeAuth = betterAuth({
         await sendAttendeeMagicLink({ email, url });
       },
     }),
+    ...(captchaPlugin ? [captchaPlugin] : []),
   ],
 });

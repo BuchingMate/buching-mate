@@ -243,14 +243,24 @@ function AttendeeLogin() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [sent, setSent] = useState(false);
+  const [captchaToken, setCaptchaToken] = useState("");
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
     setError(null);
 
+    if (turnstileEnabled && !captchaToken) {
+      setError("Please complete the captcha");
+      return;
+    }
+
+    setLoading(true);
+
     const callbackURL = `${window.location.origin}/me`;
-    const result = await attendeeAuthClient.signIn.magicLink({ email, callbackURL });
+    const result = await attendeeAuthClient.signIn.magicLink(
+      { email, callbackURL },
+      { headers: captchaToken ? { "x-captcha-response": captchaToken } : undefined },
+    );
 
     setLoading(false);
     if (result.error) {
@@ -286,6 +296,8 @@ function AttendeeLogin() {
                 required
               />
             </div>
+
+            <TurnstileWidget onToken={setCaptchaToken} />
 
             {error && (
               <Alert variant="destructive">
