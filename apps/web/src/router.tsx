@@ -1,4 +1,5 @@
 import { createRouter as createTanStackRouter } from "@tanstack/react-router";
+import { setupRouterSsrQueryIntegration } from "@tanstack/react-router-ssr-query";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
 import { HotkeysProvider, useHotkey } from "@tanstack/react-hotkeys";
@@ -50,6 +51,13 @@ export function getRouter() {
         {import.meta.env.DEV ? <QueryDevtoolsShortcut /> : null}
       </QueryClientProvider>
     ),
+  });
+
+  setupRouterSsrQueryIntegration({
+    router,
+    queryClient,
+    // We supply our own QueryClientProvider in `Wrap` (alongside Hotkeys/Theme).
+    wrapQueryClient: false,
   });
 
   setUnauthorizedHandler(() => {
