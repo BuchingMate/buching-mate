@@ -55,6 +55,8 @@ export const Route = createFileRoute("/events/$eventId/")({
       description: getEventDescription(event, orgName),
       baseUrl: loaderData?.baseUrl,
       path: `/events/${params.eventId}`,
+      image: event?.imageUrl ?? null,
+      imageAlt: event?.title ?? null,
       type: "article",
       noIndex: !loaderData?.slug || !event,
     });

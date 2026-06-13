@@ -40,12 +40,12 @@ export interface SeoHead {
 }
 
 export const bookingMateSeo: SeoDefaults = {
-  siteName: "Buching",
+  siteName: "BuchingMate",
   description:
     "Self-hostable event booking and registration for small teams, schools, studios, nonprofits, and service businesses.",
   image: {
     url: "/og-default.png",
-    alt: "Buching event booking and registration platform",
+    alt: "BuchingMate event booking and registration platform",
     width: 1200,
     height: 630,
   },

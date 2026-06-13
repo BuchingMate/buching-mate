@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="BuchingMate">
+  <rect x="8" y="14" width="48" height="42" rx="9" fill="#f97316"/>
+  <rect x="20" y="8" width="5" height="11" rx="2.5" fill="#c2410c"/>
+  <rect x="39" y="8" width="5" height="11" rx="2.5" fill="#c2410c"/>
+  <rect x="18" y="31" width="20" height="5.5" rx="2.75" fill="#fff" opacity=".6"/>
+  <rect x="18" y="42" width="28" height="5.5" rx="2.75" fill="#fff"/>
+</svg>

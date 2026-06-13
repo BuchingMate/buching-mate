@@ -1,9 +1,10 @@
 import { bookingMateSeo, makeHead, type SeoInput } from "@workspace/seo";
-import { BUSINESS_NAME } from "./branding";
+import { BUSINESS_NAME, TWITTER_SITE } from "./branding";
 
 const appSeoDefaults = {
   ...bookingMateSeo,
   siteName: BUSINESS_NAME,
+  ...(TWITTER_SITE ? { twitterSite: TWITTER_SITE } : {}),
   image: {
     ...bookingMateSeo.image,
     alt: `${BUSINESS_NAME} event booking and registration platform`,

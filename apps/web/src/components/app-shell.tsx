@@ -182,9 +182,9 @@ export function AppShell({ children, title, description, headerActions }: AppShe
             <Link
               to="/admin"
               title="Dashboard"
-              className="flex size-8 items-center justify-center rounded-lg border bg-background text-sm font-semibold shadow-xs transition-colors hover:bg-muted"
+              className="flex size-8 items-center justify-center overflow-hidden rounded-lg shadow-xs transition-transform hover:scale-105"
             >
-              B
+              <img src="/logo-mark.svg" alt="" className="size-8" />
             </Link>
             <div className="min-w-0">
               <p className="truncate text-sm font-medium tracking-[-0.02em]">{BUSINESS_NAME}</p>
@@ -240,9 +240,9 @@ export function AppShell({ children, title, description, headerActions }: AppShe
               <Link
                 to="/admin"
                 title="Dashboard"
-                className="flex size-8 items-center justify-center rounded-lg border bg-background text-sm font-semibold shadow-xs transition-colors hover:bg-muted"
+                className="flex size-8 items-center justify-center overflow-hidden rounded-lg shadow-xs transition-transform hover:scale-105"
               >
-                B
+                <img src="/logo-mark.svg" alt="" className="size-8" />
               </Link>
               <div className="min-w-0">
                 <p className="truncate text-sm font-medium tracking-[-0.02em]">{BUSINESS_NAME}</p>

@@ -5,3 +5,5 @@ export const BUSINESS_NAME =
   (import.meta.env.VITE_BUSINESS_NAME as string) || "INSERT BUSINESS NAME";
 export const BUSINESS_SLUG =
   (import.meta.env.VITE_BUSINESS_SLUG as string) || "insert-business-name";
+// Optional @handle for twitter:site card attribution. Empty = tag omitted.
+export const TWITTER_SITE = (import.meta.env.VITE_TWITTER_SITE as string) || "";
