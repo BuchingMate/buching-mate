@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as TwoFactorRouteImport } from './routes/two-factor'
 import { Route as SignupRouteImport } from './routes/signup'
+import { Route as PricingRouteImport } from './routes/pricing'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as AuthRouteImport } from './routes/_auth'
 import { Route as AttendeeRouteImport } from './routes/_attendee'
@@ -47,6 +48,11 @@ const TwoFactorRoute = TwoFactorRouteImport.update({
 const SignupRoute = SignupRouteImport.update({
   id: '/signup',
   path: '/signup',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PricingRoute = PricingRouteImport.update({
+  id: '/pricing',
+  path: '/pricing',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LoginRoute = LoginRouteImport.update({
@@ -193,6 +199,7 @@ const AuthAdminEventsEventIdAttendanceRoute =
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
+  '/pricing': typeof PricingRoute
   '/signup': typeof SignupRoute
   '/two-factor': typeof TwoFactorRoute
   '/admin': typeof AuthAdminRouteWithChildren
@@ -222,6 +229,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
+  '/pricing': typeof PricingRoute
   '/signup': typeof SignupRoute
   '/two-factor': typeof TwoFactorRoute
   '/onboarding': typeof AuthOnboardingRoute
@@ -253,6 +261,7 @@ export interface FileRoutesById {
   '/_attendee': typeof AttendeeRouteWithChildren
   '/_auth': typeof AuthRouteWithChildren
   '/login': typeof LoginRoute
+  '/pricing': typeof PricingRoute
   '/signup': typeof SignupRoute
   '/two-factor': typeof TwoFactorRoute
   '/_auth/admin': typeof AuthAdminRouteWithChildren
@@ -284,6 +293,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/login'
+    | '/pricing'
     | '/signup'
     | '/two-factor'
     | '/admin'
@@ -313,6 +323,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/login'
+    | '/pricing'
     | '/signup'
     | '/two-factor'
     | '/onboarding'
@@ -343,6 +354,7 @@ export interface FileRouteTypes {
     | '/_attendee'
     | '/_auth'
     | '/login'
+    | '/pricing'
     | '/signup'
     | '/two-factor'
     | '/_auth/admin'
@@ -375,6 +387,7 @@ export interface RootRouteChildren {
   AttendeeRoute: typeof AttendeeRouteWithChildren
   AuthRoute: typeof AuthRouteWithChildren
   LoginRoute: typeof LoginRoute
+  PricingRoute: typeof PricingRoute
   SignupRoute: typeof SignupRoute
   TwoFactorRoute: typeof TwoFactorRoute
   InviteInvitationIdRoute: typeof InviteInvitationIdRoute
@@ -399,6 +412,13 @@ declare module '@tanstack/react-router' {
       path: '/signup'
       fullPath: '/signup'
       preLoaderRoute: typeof SignupRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/pricing': {
+      id: '/pricing'
+      path: '/pricing'
+      fullPath: '/pricing'
+      preLoaderRoute: typeof PricingRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/login': {
@@ -660,6 +680,7 @@ const rootRouteChildren: RootRouteChildren = {
   AttendeeRoute: AttendeeRouteWithChildren,
   AuthRoute: AuthRouteWithChildren,
   LoginRoute: LoginRoute,
+  PricingRoute: PricingRoute,
   SignupRoute: SignupRoute,
   TwoFactorRoute: TwoFactorRoute,
   InviteInvitationIdRoute: InviteInvitationIdRoute,

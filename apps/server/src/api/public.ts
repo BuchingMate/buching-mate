@@ -22,6 +22,7 @@ import { createCheckoutForRegistration } from "../services/payments/checkout";
 import { verifyResumeToken } from "../services/payments/resume-token";
 import { verifyCalendarToken } from "../lib/calendar-token";
 import { subscribeToCalendar, unsubscribeFromCalendar } from "../services/calendar";
+import { getTeamPricing } from "../ee/billing/polar";
 import { resolveOrgByHostname } from "../services/domains";
 import { db } from "../db";
 import { registrations, organization, events as eventsTable } from "../db/schema";
@@ -91,6 +92,12 @@ export const publicRoutes = new Hono()
   .get("/events", async (c) => {
     const events = await listAllPublicEvents();
     return c.json({ events });
+  })
+  // Team plan pricing for the public marketing /pricing page. Same cached
+  // amounts as the in-app upgrade card; no customer data, safe to expose.
+  .get("/pricing", async (c) => {
+    c.header("Cache-Control", "public, max-age=300");
+    return c.json(await getTeamPricing());
   })
   // Event by id alone — lets main-domain event links work without an org slug.
   .get("/events/:eventId", async (c) => {

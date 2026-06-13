@@ -3,6 +3,7 @@ import {
   getGlobalPublicEvent,
   getPublicEvent,
   getPublicOrg,
+  getPublicPricing,
   getPublicRequestInfo,
   listGlobalPublicEvents,
   listPublicEvents,
@@ -15,6 +16,7 @@ export const publicKeys = {
   events: (slug: string) => [...publicKeys.all, "events", slug] as const,
   event: (slug: string, eventId: string) => [...publicKeys.all, "event", slug, eventId] as const,
   feed: () => [...publicKeys.all, "feed"] as const,
+  pricing: () => [...publicKeys.all, "pricing"] as const,
   globalEvent: (eventId: string) => [...publicKeys.all, "global-event", eventId] as const,
   domain: (host: string) => [...publicKeys.all, "domain", host] as const,
 };
@@ -40,6 +42,12 @@ export const publicEventQueryOptions = (slug: string, eventId: string) =>
 export const publicFeedQueryOptions = queryOptions({
   queryKey: publicKeys.feed(),
   queryFn: () => listGlobalPublicEvents(),
+});
+
+export const publicPricingQueryOptions = queryOptions({
+  queryKey: publicKeys.pricing(),
+  queryFn: () => getPublicPricing(),
+  staleTime: 5 * 60 * 1000,
 });
 
 export const globalPublicEventQueryOptions = (eventId: string) =>

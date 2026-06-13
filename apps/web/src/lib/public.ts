@@ -3,6 +3,7 @@ import { getRequestHeader } from "@tanstack/react-start/server";
 import type {
   CalendarSubscribeRequest,
   EventDto,
+  PlanPricingResponse,
   PublicFeedResponse,
   PublicGlobalEventResponse,
   PublicOrgResponse,
@@ -35,6 +36,11 @@ export function getPublicOrg(slug: string) {
 // Cross-org feed shown at /events on the main domain.
 export function listGlobalPublicEvents() {
   return api.get<PublicFeedResponse>("/api/public/events");
+}
+
+// Team plan pricing for the public marketing page (cached server-side).
+export function getPublicPricing() {
+  return api.get<PlanPricingResponse>("/api/public/pricing");
 }
 
 // Event by id without an org slug; includes the org context and (if the org

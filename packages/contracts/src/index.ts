@@ -178,7 +178,7 @@ export const TEAM_BENEFITS: readonly string[] = [
   "Unlimited managers & viewers",
   `${TEAM_INCLUDED_WEEKLY_SENDS.toLocaleString("en-US")} broadcast sends per week`,
   "Send email from your own domain",
-  "Custom subdomain",
+  "Publish on your own custom domain",
 ] as const;
 
 // Current subscription summary for the plan card. All fields null when the org has
