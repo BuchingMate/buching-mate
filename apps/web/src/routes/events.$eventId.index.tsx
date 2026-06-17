@@ -1,6 +1,6 @@
 import { createFileRoute, Link, redirect } from "@tanstack/react-router";
 import { useSuspenseQuery } from "@tanstack/react-query";
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, ExternalLink, MapPin, Tag, Ticket, Users } from "lucide-react";
 import { makeAppHead } from "@/lib/seo";
 import {
   Carousel,
@@ -99,11 +99,15 @@ function PublicEventDetailContent({
 
   const tile = dateTile(event.date);
   const dayLabel = dayName(event.date);
-  const timeLabel = formatTime(event.time);
+  const dateLabel = `${dayLabel}, ${tile.month} ${tile.day}`;
+  const timeRange = formatTimeRange(event.date, event.time, event.endTime, event.timezone);
   const priceLabel = isPaid ? formatPrice(event.price, currency) : "Free";
   // Waitlist is opt-in per event: a full event without it is simply sold out.
   const soldOut = full && !event.waitlistEnabled;
   const ctaLabel = full ? "Join waitlist" : isPaid ? "Get tickets" : "Register";
+  const contactEmail = orgData.settings?.contactEmail ?? null;
+  const hasMap = event.locationLat !== null && event.locationLng !== null;
+  const tagList = event.tags.length > 0 ? event.tags : event.category ? [event.category] : [];
 
   return (
     <div className="min-h-svh bg-background">
@@ -111,36 +115,13 @@ function PublicEventDetailContent({
         <PublicBrandBar
           orgName={orgData.org.name}
           logo={orgData.org.logo}
-          contactEmail={orgData.settings?.contactEmail ?? null}
+          contactEmail={contactEmail}
         />
       ) : (
         <PlatformBrandBar width="wide" />
       )}
 
-      {event.imageUrl ? (
-        <section className="relative w-full overflow-hidden bg-muted">
-          <div className="relative mx-auto h-[360px] max-w-5xl sm:rounded-b-2xl sm:h-[420px] overflow-hidden">
-            <img
-              src={event.imageUrl}
-              alt=""
-              className="absolute inset-0 h-full w-full object-cover"
-            />
-            <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/30 to-transparent" />
-            <div className="relative flex h-full flex-col justify-end px-6 pb-10 sm:px-10">
-              <div className="max-w-3xl text-white">
-                {event.category ? (
-                  <div className="text-sm font-medium text-white/85">{event.category}</div>
-                ) : null}
-                <h1 className="mt-1 font-heading text-4xl font-semibold leading-[1.05] tracking-tight sm:text-5xl">
-                  {event.title}
-                </h1>
-              </div>
-            </div>
-          </div>
-        </section>
-      ) : null}
-
-      <main className="mx-auto max-w-5xl px-6 py-10">
+      <main className="mx-auto max-w-5xl px-6 py-8">
         <nav className="mb-6 flex items-center gap-1.5 text-sm text-muted-foreground">
           <Link to="/events" className="hover:text-foreground hover:underline">
             Events
@@ -149,146 +130,219 @@ function PublicEventDetailContent({
           <span className="truncate text-foreground">{event.title}</span>
         </nav>
 
-        {!event.imageUrl ? (
-          <header className="mb-8 max-w-3xl">
-            {event.category ? (
-              <div className="text-sm font-medium text-muted-foreground">{event.category}</div>
-            ) : null}
-            <h1 className="mt-1 font-heading text-4xl font-semibold leading-[1.05] tracking-tight text-foreground sm:text-5xl">
-              {event.title}
-            </h1>
-          </header>
-        ) : null}
-
-        <div className="flex items-center gap-3">
-          {orgData.org.logo ? (
-            <img
-              src={orgData.org.logo}
-              alt=""
-              className="size-9 rounded-full object-cover ring-1 ring-border"
-            />
-          ) : (
-            <span className="flex size-9 items-center justify-center rounded-full bg-primary/10 font-heading text-sm font-semibold text-primary/70">
-              {orgData.org.name.trim()[0]?.toUpperCase() ?? "•"}
-            </span>
-          )}
-          <div className="min-w-0">
-            <div className="text-xs text-muted-foreground">Hosted by</div>
-            <div className="truncate text-sm font-semibold text-foreground">{orgData.org.name}</div>
-          </div>
-        </div>
-
-        <div className="mt-8 overflow-hidden rounded-xl border border-border bg-card">
-          <div className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center">
-            <div className="flex w-24 shrink-0 flex-col items-center rounded-lg bg-muted px-3 py-3 text-center">
-              <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                {tile.month}
-              </span>
-              <span className="font-heading text-3xl font-semibold leading-none tabular-nums tracking-tight">
-                {tile.day}
-              </span>
-              <span className="mt-1 text-xs text-muted-foreground">{tile.year}</span>
+        <div className="grid gap-x-10 gap-y-8 lg:grid-cols-[300px_1fr]">
+          {/* Left sidebar: poster, host, attendance, location */}
+          <aside className="space-y-6">
+            <div className="aspect-square overflow-hidden rounded-2xl border border-border bg-muted">
+              {event.imageUrl ? (
+                <img src={event.imageUrl} alt="" className="h-full w-full object-cover" />
+              ) : (
+                <div className="flex h-full w-full flex-col items-center justify-center bg-gradient-to-br from-primary/15 to-primary/5 p-6 text-center">
+                  <span className="font-heading text-2xl font-semibold leading-tight tracking-tight text-primary/70">
+                    {event.title}
+                  </span>
+                </div>
+              )}
             </div>
 
-            <div className="min-w-0 flex-1 space-y-1">
-              <div className="text-sm text-muted-foreground">
-                <span className="font-medium text-foreground">{dayLabel}</span>
-                <span className="mx-1.5">·</span>
-                <span>{timeLabel}</span>
-                <span className="mx-1.5">·</span>
-                <span>{event.duration} min</span>
-              </div>
-              {event.location ? (
-                <div className="text-base font-semibold text-foreground">{event.location}</div>
-              ) : null}
-              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 pt-1 text-sm">
-                <span className="font-semibold text-foreground">{priceLabel}</span>
-                {full ? (
-                  <span className="inline-flex h-6 items-center rounded-full bg-primary/10 px-2.5 text-xs font-semibold text-primary">
-                    {soldOut ? "Sold out" : "Waitlist open"}
+            <div className="space-y-3">
+              <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                Hosted by
+              </h2>
+              <div className="flex items-center gap-3 border-t border-border pt-3">
+                {orgData.org.logo ? (
+                  <img
+                    src={orgData.org.logo}
+                    alt=""
+                    className="size-8 rounded-full object-cover ring-1 ring-border"
+                  />
+                ) : (
+                  <span className="flex size-8 items-center justify-center rounded-full bg-primary/10 font-heading text-sm font-semibold text-primary/70">
+                    {orgData.org.name.trim()[0]?.toUpperCase() ?? "•"}
                   </span>
-                ) : low ? (
-                  <span className="inline-flex h-6 items-center rounded-full bg-primary/10 px-2.5 text-xs font-semibold text-primary">
-                    Only {remaining} left
-                  </span>
-                ) : remaining !== null ? (
-                  <span className="text-xs text-muted-foreground">{remaining} spots left</span>
-                ) : null}
+                )}
+                <span className="truncate text-sm font-semibold text-foreground">
+                  {orgData.org.name}
+                </span>
               </div>
             </div>
 
-            {soldOut ? (
-              <span className="inline-flex h-11 shrink-0 cursor-not-allowed items-center justify-center rounded-full bg-muted px-6 text-sm font-semibold text-muted-foreground">
-                Event full
-              </span>
-            ) : (
-              <Link
-                to="/events/$eventId/book"
-                params={{ eventId }}
-                className="inline-flex h-11 shrink-0 items-center justify-center gap-1 rounded-full bg-primary px-6 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
-              >
-                {ctaLabel}
-                <ChevronRight className="size-4" />
-              </Link>
-            )}
-          </div>
-        </div>
+            <div className="space-y-2 border-t border-border pt-4 text-sm">
+              <div className="flex items-center gap-2 text-muted-foreground">
+                <Users className="size-4" />
+                <span>
+                  <span className="font-semibold text-foreground">
+                    {event.confirmedRegistrations}
+                  </span>{" "}
+                  going
+                </span>
+              </div>
+              {contactEmail ? (
+                <a
+                  href={`mailto:${contactEmail}`}
+                  className="block text-muted-foreground hover:text-foreground hover:underline"
+                >
+                  Contact the host
+                </a>
+              ) : null}
+            </div>
 
-        <div className="mt-12 grid gap-10 lg:grid-cols-3">
-          <div className="lg:col-span-2 space-y-4">
-            <h3 className="font-heading text-lg font-semibold tracking-tight">About this event</h3>
-            {event.description ? (
-              <p className="max-w-[70ch] whitespace-pre-line text-base leading-relaxed text-foreground">
-                {event.description}
-              </p>
-            ) : (
-              <p className="text-base text-muted-foreground">No description provided.</p>
-            )}
-
-            {extraGallery.length > 0 ? (
-              <div className="pt-6">
-                <h4 className="mb-3 font-heading text-base font-semibold tracking-tight">
-                  Gallery
-                </h4>
-                <EventImageGallery images={extraGallery} />
+            {tagList.length > 0 ? (
+              <div className="flex flex-wrap gap-2 border-t border-border pt-4">
+                {tagList.map((tag) => (
+                  <span
+                    key={tag}
+                    className="inline-flex items-center gap-1 rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground"
+                  >
+                    <Tag className="size-3" />
+                    {tag}
+                  </span>
+                ))}
               </div>
             ) : null}
-          </div>
 
-          <aside className="space-y-4">
-            <h3 className="font-heading text-lg font-semibold tracking-tight">Event info</h3>
-            <dl className="space-y-3 rounded-xl border border-border bg-card p-5 text-sm">
-              <InfoRow label="When" value={`${dayLabel}, ${tile.month} ${tile.day} ${tile.year}`} />
-              <InfoRow label="Time" value={`${timeLabel} · ${event.duration} min`} />
-              {event.location ? <InfoRow label="Where" value={event.location} /> : null}
-              <InfoRow label="Price" value={priceLabel} />
-              {remaining !== null ? (
-                <InfoRow
-                  label="Availability"
-                  value={
-                    remaining === 0
-                      ? soldOut
-                        ? "Sold out"
-                        : "Full · waitlist open"
-                      : `${remaining} spots left`
-                  }
-                />
-              ) : null}
-            </dl>
+            {event.location ? (
+              <div className="space-y-3 border-t border-border pt-4">
+                <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Location
+                </h2>
+                <div className="text-sm font-semibold text-foreground">{event.location}</div>
+                {hasMap ? (
+                  <a
+                    href={`https://www.google.com/maps/search/?api=1&query=${event.locationLat},${event.locationLng}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="block overflow-hidden rounded-xl border border-border"
+                  >
+                    <iframe
+                      title="Event location map"
+                      className="pointer-events-none h-44 w-full"
+                      loading="lazy"
+                      src={`https://www.google.com/maps?q=${event.locationLat},${event.locationLng}&z=15&output=embed`}
+                    />
+                  </a>
+                ) : (
+                  <a
+                    href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(event.location)}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground hover:underline"
+                  >
+                    Open in Maps
+                    <ExternalLink className="size-3.5" />
+                  </a>
+                )}
+              </div>
+            ) : null}
           </aside>
+
+          {/* Right column: title, when/where, registration, about */}
+          <div className="space-y-7">
+            <div className="space-y-3">
+              {event.category ? (
+                <span className="inline-flex items-center rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
+                  {event.category}
+                </span>
+              ) : null}
+              <h1 className="font-heading text-4xl font-semibold leading-[1.05] tracking-tight text-foreground sm:text-5xl">
+                {event.title}
+              </h1>
+            </div>
+
+            <div className="space-y-3">
+              <div className="flex items-center gap-3">
+                <div className="flex size-11 shrink-0 flex-col items-center justify-center rounded-lg border border-border bg-card text-center leading-none">
+                  <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    {tile.month}
+                  </span>
+                  <span className="font-heading text-lg font-semibold tabular-nums">
+                    {tile.day}
+                  </span>
+                </div>
+                <div className="min-w-0">
+                  <div className="text-sm font-semibold text-foreground">{dateLabel}</div>
+                  <div className="text-sm text-muted-foreground">{timeRange}</div>
+                </div>
+              </div>
+
+              {event.location ? (
+                <div className="flex items-center gap-3">
+                  <span className="flex size-11 shrink-0 items-center justify-center rounded-lg border border-border bg-card">
+                    <MapPin className="size-5 text-muted-foreground" />
+                  </span>
+                  <div className="min-w-0 text-sm font-semibold text-foreground">
+                    {event.location}
+                  </div>
+                </div>
+              ) : null}
+            </div>
+
+            <div className="overflow-hidden rounded-xl border border-border bg-card">
+              <div className="border-b border-border bg-muted/40 px-5 py-3">
+                <h2 className="text-sm font-semibold text-foreground">Registration</h2>
+              </div>
+              <div className="space-y-4 p-5">
+                <div className="flex items-start gap-3">
+                  <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
+                    <Ticket className="size-4" />
+                  </span>
+                  <div className="min-w-0">
+                    <div className="text-sm font-semibold text-foreground">
+                      {soldOut ? "Event Full" : full ? "Event Full" : priceLabel}
+                    </div>
+                    <div className="text-sm text-muted-foreground">
+                      {soldOut
+                        ? "Registration is closed."
+                        : full
+                          ? "If you'd like, you can join the waitlist."
+                          : low
+                            ? `Only ${remaining} spots left.`
+                            : remaining !== null
+                              ? `${remaining} spots left.`
+                              : "Spots available."}
+                    </div>
+                  </div>
+                </div>
+
+                {soldOut ? (
+                  <span className="flex h-11 w-full cursor-not-allowed items-center justify-center rounded-full bg-muted text-sm font-semibold text-muted-foreground">
+                    Event full
+                  </span>
+                ) : (
+                  <Link
+                    to="/events/$eventId/book"
+                    params={{ eventId }}
+                    className="flex h-11 w-full items-center justify-center gap-1 rounded-full bg-primary text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
+                  >
+                    {ctaLabel}
+                    <ChevronRight className="size-4" />
+                  </Link>
+                )}
+              </div>
+            </div>
+
+            <div className="space-y-4 border-t border-border pt-6">
+              <h2 className="font-heading text-lg font-semibold tracking-tight">About Event</h2>
+              {event.description ? (
+                <p className="max-w-[70ch] whitespace-pre-line text-base leading-relaxed text-foreground">
+                  {event.description}
+                </p>
+              ) : (
+                <p className="text-base text-muted-foreground">No description provided.</p>
+              )}
+
+              {extraGallery.length > 0 ? (
+                <div className="pt-4">
+                  <h3 className="mb-3 font-heading text-base font-semibold tracking-tight">
+                    Gallery
+                  </h3>
+                  <EventImageGallery images={extraGallery} />
+                </div>
+              ) : null}
+            </div>
+          </div>
         </div>
       </main>
-    </div>
-  );
-}
-
-function InfoRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex items-baseline justify-between gap-4 border-b pb-2 last:border-0 last:pb-0">
-      <dt className="text-2xs font-semibold uppercase tracking-wider text-muted-foreground">
-        {label}
-      </dt>
-      <dd className="text-right text-sm font-medium text-foreground">{value}</dd>
     </div>
   );
 }
@@ -338,12 +392,35 @@ function dayName(date: string) {
   return d.toLocaleDateString(undefined, { weekday: "long" });
 }
 
+// Wall-clock time strings ("16:00") are already in the event's timezone, so we
+// format the digits directly and append the zone abbreviation separately.
 function formatTime(time: string) {
   const [h, m] = time.split(":").map((n) => Number.parseInt(n, 10));
   if (Number.isNaN(h) || Number.isNaN(m)) return time;
   const d = new Date();
   d.setHours(h, m, 0, 0);
   return d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+}
+
+function tzAbbrev(date: string, timezone: string) {
+  const d = new Date(`${date}T12:00:00Z`);
+  if (Number.isNaN(d.getTime())) return "";
+  try {
+    const parts = new Intl.DateTimeFormat("en-US", {
+      timeZone: timezone,
+      timeZoneName: "short",
+    }).formatToParts(d);
+    return parts.find((p) => p.type === "timeZoneName")?.value ?? "";
+  } catch {
+    return "";
+  }
+}
+
+function formatTimeRange(date: string, time: string, endTime: string | null, timezone: string) {
+  const start = formatTime(time);
+  const abbrev = tzAbbrev(date, timezone);
+  const end = endTime ? ` - ${formatTime(endTime.slice(0, 5))}` : "";
+  return `${start}${end}${abbrev ? ` ${abbrev}` : ""}`;
 }
 
 function getEventDescription(
